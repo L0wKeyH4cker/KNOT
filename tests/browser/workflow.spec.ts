@@ -3,6 +3,13 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+// The introduction has its own first-visit suite; these tests exercise the editor.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem('knot.onboarding.v1', JSON.stringify({ version: 1, status: 'skipped' })),
+  );
+});
+
 const artifactDir = resolve('artifacts/browser');
 mkdirSync(artifactDir, { recursive: true });
 async function openTemplate(page: Page) {

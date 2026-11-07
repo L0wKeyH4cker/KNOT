@@ -33,9 +33,10 @@ export function usePage() {
     };
   }, []);
 
-  const navigate = useCallback((next: Page) => {
+  const navigate = useCallback((next: Page, options?: { replace?: boolean }) => {
     const target = `${window.location.pathname}${window.location.search}${routes[next] ? `#${routes[next]}` : ''}`;
-    if (currentPage() !== next) window.history.pushState(null, '', target);
+    if (currentPage() !== next)
+      window.history[options?.replace ? 'replaceState' : 'pushState'](null, '', target);
     setPage(next);
   }, []);
 

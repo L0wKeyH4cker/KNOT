@@ -1,5 +1,6 @@
 import { ArrowRight, ArrowUp, Blocks, ChevronRight, FolderOpen, Paperclip } from 'lucide-react';
 import type { Workflow } from './model';
+import { useEffect, useRef } from 'react';
 
 type Props = {
   projects: Workflow[];
@@ -12,6 +13,9 @@ type Props = {
   onProjects: () => void;
   onOpen: (project: Workflow) => void;
   onHelp: () => void;
+  firstVisit: boolean;
+  onDismissWelcome: () => void;
+  focusComposer: boolean;
 };
 
 export default function Home({
@@ -25,7 +29,14 @@ export default function Home({
   onProjects,
   onOpen,
   onHelp,
+  firstVisit,
+  onDismissWelcome,
+  focusComposer,
 }: Props) {
+  const composer = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (focusComposer) composer.current?.focus();
+  }, [focusComposer]);
   return (
     <div className="home-page" data-testid="home-page">
       <header className="home-header">
@@ -63,6 +74,7 @@ export default function Home({
           }}
         >
           <textarea
+            ref={composer}
             aria-label="Describe your project"
             placeholder="A research project, a big question, your next idea…"
             value={idea}
@@ -97,14 +109,26 @@ export default function Home({
           </div>
         </form>
 
-        <button
-          className="home-example"
-          aria-label="Try the three-person example template"
-          disabled={busy}
-          onClick={onExample}
-        >
-          Or explore an example <ArrowRight size={14} />
-        </button>
+        <div className={`example-entry ${firstVisit ? 'first-visit' : ''}`}>
+          <button
+            className={`home-example ${firstVisit ? 'example-highlight' : ''}`}
+            aria-describedby={firstVisit ? 'example-welcome' : undefined}
+            aria-label="Try the three-person example template"
+            disabled={busy}
+            onClick={onExample}
+          >
+            {firstVisit && <span className="example-start-badge">START HERE</span>}
+            {firstVisit ? 'Explore an example' : 'Or explore an example'} <ArrowRight size={14} />
+          </button>
+          {firstVisit && (
+            <p className="example-welcome" id="example-welcome">
+              New here? See how it works, step by step.
+              <button onClick={onDismissWelcome} aria-label="Skip introduction">
+                Skip
+              </button>
+            </p>
+          )}
+        </div>
 
         {projects.length > 0 && (
           <section className="home-recent" aria-label="Recent projects">

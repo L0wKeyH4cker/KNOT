@@ -5,6 +5,9 @@ import { readFileSync } from 'node:fs';
 // model-generating routes are blocked so this suite cannot spend API tokens.
 const modelCalls = new WeakMap<Page, string[]>();
 test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem('knot.onboarding.v1', JSON.stringify({ version: 1, status: 'skipped' })),
+  );
   const calls: string[] = [];
   modelCalls.set(page, calls);
   await page.route(/\/api\/(?:plan|requirements\/analyze)$/, async (route) => {

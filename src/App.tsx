@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -42,6 +42,8 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 import Home from './Home';
+import { TOUR_STEPS, readOnboardingStatus, rememberOnboarding } from './onboarding';
+import type { OnboardingStatus } from './onboarding';
 import { usePage } from './navigation';
 import BlockNode, { icons } from './BlockNode';
 import Inspector, { Field } from './Inspector';
@@ -63,6 +65,7 @@ import {
 } from './model';
 import type { Workflow, Block, NodeKind, Link, Issue } from './model';
 const nodeTypes = { block: BlockNode };
+const GuidedTour = lazy(() => import('./GuidedTour'));
 const STORAGE = KNOT_STORAGE,
   LIBRARY = KNOT_LIBRARY,
   PLANNER = 'knot.planner.v1';
@@ -178,6 +181,14 @@ export default function App() {
   const plannerInitialized = useRef(plannerReady);
   const [draft, setDraft] = useState({ name: '', members: 3, goal: '', deliverable: '' });
   const [intakeProject, setIntakeProject] = useState<Workflow | null>(null);
+  const [firstVisit, setFirstVisit] = useState(() => readOnboardingStatus() === null);
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const [focusHomeComposer, setFocusHomeComposer] = useState(false);
+  const tourSnapshot = useRef<{ workflow: Workflow; search: string; showData: boolean } | null>(
+    null,
+  );
+  const templateRequest = useRef(0);
+  const validationRequest = useRef(0);
   const planningRequest = useRef(0);
   const activePage = useRef(page);
   activePage.current = page;
@@ -202,6 +213,38 @@ export default function App() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 6500);
   }, []);
+  const dismissWelcome = () => {
+    templateRequest.current += 1;
+    setBusy((value) => (value === 'template' ? '' : value));
+    rememberOnboarding('skipped');
+    setFirstVisit(false);
+  };
+  const endTour = useCallback(
+    (status: OnboardingStatus) => {
+      const snapshot = tourSnapshot.current;
+      if (snapshot) {
+        setWf(snapshot.workflow);
+        setSearch(snapshot.search);
+        setShowData(snapshot.showData);
+        tourSnapshot.current = null;
+      }
+      validationRequest.current += 1;
+      setTourStep(null);
+      setSelected(null);
+      setEdgeSelected(null);
+      setToast('');
+      setBusy((value) => (value === 'check' || value === 'template' ? '' : value));
+      rememberOnboarding(status);
+      setFirstVisit(false);
+      setFocusHomeComposer(true);
+      navigate('home', { replace: true });
+    },
+    [navigate],
+  );
+  useEffect(() => {
+    // Native Back exits the tour rather than stranding a coachmark on another page.
+    if (tourStep !== null && page !== TOUR_STEPS[tourStep].page) endTour('skipped');
+  }, [page, tourStep, endTour]);
   const remember = useCallback(() => {
     past.current = [...past.current.slice(-49), structuredClone(current.current)];
     future.current = [];
@@ -238,7 +281,9 @@ export default function App() {
     }
   }, []);
   useEffect(() => {
+    if (tourSnapshot.current) return;
     const timer = setTimeout(() => {
+      if (tourSnapshot.current) return;
       try {
         assertSafeWorkflow(wf);
         localStorage.setItem(STORAGE, JSON.stringify(wf));
@@ -248,7 +293,7 @@ export default function App() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [wf]);
+  }, [wf, tourStep]);
   useEffect(() => {
     api<{
       ok: boolean;
@@ -326,6 +371,7 @@ export default function App() {
   }, [selected, edgeSelected, change]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (tourStep !== null) return;
       if (page === 'home') return;
       if (page === 'new') {
         if (e.key === 'Escape') navigate('home');
@@ -364,7 +410,20 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, save, duplicate, remove, modal, wizard, busy, page, navigate, setModal]);
+  }, [
+    undo,
+    redo,
+    save,
+    duplicate,
+    remove,
+    modal,
+    wizard,
+    busy,
+    page,
+    navigate,
+    setModal,
+    tourStep,
+  ]);
   const add = (kind: NodeKind, position?: { x: number; y: number }) => {
     const n = newBlock(
       kind,
@@ -437,31 +496,62 @@ export default function App() {
       })),
     }));
   };
-  async function loadTemplate() {
+  const fitTour = () =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        void flow.fitView({ padding: 0.2, duration: 0, maxZoom: 1 });
+      }),
+    );
+  async function loadExample(guided: boolean) {
+    const request = ++templateRequest.current;
+    const source = activePage.current;
+    const isCurrentRequest = () =>
+      templateRequest.current === request && activePage.current === source;
     setBusy('template');
     try {
       const value = parseWorkflow(await api<Workflow>('template'));
-      change(value);
+      if (!isCurrentRequest()) return;
+      if (guided) {
+        // Keep the visitor's actual project and history untouched throughout the demo.
+        tourSnapshot.current = { workflow: structuredClone(current.current), search, showData };
+        setWf(value);
+        setSearch('');
+        setShowData(true);
+        setTourStep(0);
+        setToast('');
+      } else change(value);
       navigate('canvas');
       setSelected(null);
-      notify('Example template loaded — all blocks are editable. Uses labeled sample data.');
-      fit();
+      setEdgeSelected(null);
+      if (guided) fitTour();
+      else {
+        notify('Example template loaded — all blocks are editable. Uses labeled sample data.');
+        fit();
+      }
     } catch (e) {
-      notify((e as Error).message);
+      if (isCurrentRequest()) notify((e as Error).message);
     } finally {
-      setBusy('');
+      if (request === templateRequest.current)
+        setBusy((value) => (value === 'template' ? '' : value));
     }
   }
-  async function check() {
-    setModal('check');
+  const loadTemplate = () => loadExample(false);
+  const startGuidedExample = () => loadExample(true);
+  async function runCheck(candidate: Workflow) {
+    const request = ++validationRequest.current;
     setBusy('check');
     try {
-      const { issues } = await api<{ issues: Issue[] }>('validate', { workflow: wf, mode: 'mock' });
+      const { issues } = await api<{ issues: Issue[] }>('validate', {
+        workflow: candidate,
+        mode: 'mock',
+      });
+      if (request !== validationRequest.current) return;
       setIssues(issues);
       setOnline(true);
     } catch (e) {
+      if (request !== validationRequest.current) return;
       setIssues([
-        ...localIssues(wf),
+        ...localIssues(candidate),
         {
           severity: 'error',
           code: 'backend',
@@ -469,9 +559,29 @@ export default function App() {
         },
       ]);
     } finally {
-      setBusy('');
+      if (request === validationRequest.current)
+        setBusy((value) => (value === 'check' ? '' : value));
     }
   }
+  async function check() {
+    setModal('check');
+    await runCheck(wf);
+  }
+  const moveTour = (index: number) => {
+    if (index < 0 || index >= TOUR_STEPS.length) return;
+    const step = TOUR_STEPS[index];
+    setTourStep(index);
+    setSelected(
+      step.id === 'task'
+        ? current.current.nodes.find((node) => node.type === 'agent_task')?.id || null
+        : null,
+    );
+    setEdgeSelected(null);
+    modalOrigin.current = 'canvas';
+    navigate(step.page, { replace: true });
+    if (step.page === 'canvas') fitTour();
+    if (step.id === 'check') void runCheck(current.current);
+  };
   async function exportZip() {
     setBusy('export');
     try {
@@ -574,11 +684,13 @@ export default function App() {
     requestAnimationFrame(() => flow.setViewport(project.viewport, { duration: 250 }));
   };
   const startProject = (idea: string) => {
+    if (firstVisit) dismissWelcome();
     if (hasProject(wf)) save();
     setDraft({ name: '', members: 3, goal: idea, deliverable: '' });
     setWizard(1);
   };
   const startRequirements = (idea: string) => {
+    if (firstVisit) dismissWelcome();
     if (hasProject(wf)) save();
     const next = emptyWorkflow();
     next.project.goal = idea;
@@ -627,14 +739,17 @@ export default function App() {
           busy={!!busy}
           onStart={startProject}
           onRequirements={startRequirements}
-          onExample={loadTemplate}
+          onExample={firstVisit ? startGuidedExample : loadTemplate}
           onProjects={openLibrary}
           onOpen={openProject}
           onHelp={() => setModal('help')}
+          firstVisit={firstVisit}
+          onDismissWelcome={dismissWelcome}
+          focusComposer={focusHomeComposer}
         />
       )}
       {page !== 'home' && page !== 'new' && (
-        <div className="editor-layout" inert={!!modal}>
+        <div className="editor-layout" inert={!!modal || tourStep !== null}>
           <nav className="rail" aria-label="Main navigation">
             <button className="brand-mark" title="KNOT home" onClick={() => navigate('home')}>
               <Blocks size={24} />
@@ -733,7 +848,12 @@ export default function App() {
                   <Save size={15} />
                   Save
                 </button>
-                <button className="primary" disabled={!!busy} onClick={exportZip}>
+                <button
+                  className="primary"
+                  data-tour="export-runner"
+                  disabled={!!busy}
+                  onClick={exportZip}
+                >
                   {busy === 'export' ? (
                     <LoaderCircle className="spin" size={16} />
                   ) : (
@@ -745,7 +865,7 @@ export default function App() {
               </div>
             </section>
             <div className="studio">
-              <aside className="library">
+              <aside className="library" data-tour="block-library">
                 <div className="panel-head">
                   <span>Building blocks</span>
                   <span className="count-badge">7</span>
@@ -880,7 +1000,9 @@ export default function App() {
                     }}
                     onConnect={connect}
                     onReconnect={(old, next) => connect(next, old.id)}
-                    onMoveEnd={(_, viewport) => setWf((w) => ({ ...w, viewport }))}
+                    onMoveEnd={(_, viewport) => {
+                      if (!tourSnapshot.current) setWf((w) => ({ ...w, viewport }));
+                    }}
                     defaultViewport={wf.viewport}
                     snapToGrid
                     snapGrid={[16, 16]}
@@ -1378,6 +1500,13 @@ export default function App() {
               )}
               {modal === 'help' && (
                 <div className="help-content">
+                  <button
+                    className="secondary guided-tour-replay"
+                    disabled={!!busy}
+                    onClick={startGuidedExample}
+                  >
+                    <MousePointer2 size={16} /> Take a guided tour <ArrowRight size={15} />
+                  </button>
                   <div className="note">
                     <BookOpen size={18} />
                     The canvas is the source of truth. The ZIP contains exactly the workflow you
@@ -1480,6 +1609,16 @@ export default function App() {
             </div>
           </section>
         </div>
+      )}
+      {tourStep !== null && (
+        <Suspense fallback={null}>
+          <GuidedTour
+            step={tourStep}
+            onStep={moveTour}
+            onSkip={() => endTour('skipped')}
+            onFinish={() => endTour('completed')}
+          />
+        </Suspense>
       )}
     </div>
   );

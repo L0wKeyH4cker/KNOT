@@ -3,6 +3,12 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem('knot.onboarding.v1', JSON.stringify({ version: 1, status: 'skipped' })),
+  );
+});
+
 // PDF extraction, validation and ZIP export use the real local backend. Only the
 // two model responses are fixtures; this suite never calls a paid model API.
 const artifactDir = resolve('artifacts/browser');
