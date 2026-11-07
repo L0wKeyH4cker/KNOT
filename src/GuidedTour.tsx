@@ -13,12 +13,14 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 export default function GuidedTour({
   step,
   onStep,
-  onSkip,
+  onHome,
+  onClose,
   onFinish,
 }: {
   step: number;
   onStep: (step: number) => void;
-  onSkip: () => void;
+  onHome: () => void;
+  onClose: () => void;
   onFinish: () => void;
 }) {
   const current = TOUR_STEPS[step];
@@ -118,7 +120,7 @@ export default function GuidedTour({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        onSkip();
+        onClose();
       } else if (event.key === 'Tab') {
         const controls = Array.from(
           card.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || [],
@@ -137,7 +139,7 @@ export default function GuidedTour({
     };
     window.addEventListener('keydown', keyboard, true);
     return () => window.removeEventListener('keydown', keyboard, true);
-  }, [onSkip]);
+  }, [onClose]);
 
   const width = Math.min(352, layout.width - margin * 2);
   let left = (layout.width - width) / 2;
@@ -214,7 +216,7 @@ export default function GuidedTour({
           <span className="tour-step-label">
             {complete ? 'ALL SET' : `QUICK TOUR · ${step + 1} OF ${TOUR_STEPS.length - 1}`}
           </span>
-          <button className="tour-close" aria-label="Close tour" onClick={onSkip}>
+          <button className="tour-close" aria-label="Close tour" onClick={onClose}>
             <X size={16} />
           </button>
         </div>
@@ -238,8 +240,8 @@ export default function GuidedTour({
             <ArrowLeft size={14} /> Previous
           </button>
           {!complete && (
-            <button className="tour-skip" onClick={onSkip}>
-              Skip tour
+            <button className="tour-home" onClick={onHome}>
+              Back to home
             </button>
           )}
           <button

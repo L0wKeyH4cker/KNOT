@@ -187,6 +187,7 @@ export default function App() {
   const tourSnapshot = useRef<{ workflow: Workflow; search: string; showData: boolean } | null>(
     null,
   );
+  const pendingTourProjects = useRef<Workflow[]>([]);
   const templateRequest = useRef(0);
   const validationRequest = useRef(0);
   // React Flow needs measured sizes on every controlled-node update. Keep this
@@ -231,6 +232,43 @@ export default function App() {
     setBusy((value) => (value === 'template' ? '' : value));
     rememberOnboarding('skipped');
     setFirstVisit(false);
+  };
+  const archiveTourProjects = useCallback(() => {
+    if (!pendingTourProjects.current.length) return;
+    const stored: unknown = JSON.parse(localStorage.getItem(LIBRARY) || '[]');
+    if (!Array.isArray(stored)) throw new Error('Invalid project library');
+    const previous = pendingTourProjects.current;
+    const ids = new Set(previous.map((project) => project.project.id));
+    const next = [
+      ...previous,
+      ...stored.map(parseWorkflow).filter((project) => !ids.has(project.project.id)),
+    ];
+    localStorage.setItem(LIBRARY, JSON.stringify(next));
+    pendingTourProjects.current = [];
+    setSavedProjects(next);
+  }, []);
+  const closeTour = () => {
+    const snapshot = tourSnapshot.current;
+    if (snapshot) {
+      // Closing the coachmark makes the example editable. Archive the original
+      // before autosaving the example, so an unfinished project stays recoverable.
+      if (hasProject(snapshot.workflow)) {
+        pendingTourProjects.current = [
+          snapshot.workflow,
+          ...pendingTourProjects.current.filter(
+            (project) => project.project.id !== snapshot.workflow.project.id,
+          ),
+        ];
+      }
+      past.current = [...past.current.slice(-49), snapshot.workflow];
+      future.current = [];
+      setHistoryTick((value) => value + 1);
+      tourSnapshot.current = null;
+    }
+    setWf((workflow) => ({ ...workflow, viewport: flow.getViewport() }));
+    rememberOnboarding('skipped');
+    setFirstVisit(false);
+    setTourStep(null);
   };
   const endTour = useCallback(
     (status: OnboardingStatus) => {
@@ -299,6 +337,7 @@ export default function App() {
       if (tourSnapshot.current) return;
       try {
         assertSafeWorkflow(wf);
+        archiveTourProjects();
         localStorage.setItem(STORAGE, JSON.stringify(wf));
         setSavedStatus('Saved on this device');
       } catch {
@@ -306,7 +345,7 @@ export default function App() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [wf, tourStep]);
+  }, [wf, tourStep, archiveTourProjects]);
   useEffect(() => {
     api<{
       ok: boolean;
@@ -340,6 +379,7 @@ export default function App() {
   const save = useCallback(() => {
     try {
       assertSafeWorkflow(current.current);
+      archiveTourProjects();
       const raw = JSON.parse(localStorage.getItem(LIBRARY) || '[]') as Workflow[];
       const next = [
         current.current,
@@ -352,7 +392,7 @@ export default function App() {
     } catch (e) {
       notify('Could not save: ' + (e as Error).message);
     }
-  }, [notify]);
+  }, [notify, archiveTourProjects]);
   const duplicate = useCallback(() => {
     const n = current.current.nodes.find((n) => n.id === selected);
     if (n) {
@@ -534,6 +574,7 @@ export default function App() {
       if (guided) {
         // Keep the visitor's actual project and history untouched throughout the demo.
         tourSnapshot.current = { workflow: structuredClone(current.current), search, showData };
+        value.project.id = uid('example');
         setWf(value);
         setSearch('');
         setShowData(true);
@@ -1586,7 +1627,8 @@ export default function App() {
           <GuidedTour
             step={tourStep}
             onStep={moveTour}
-            onSkip={() => endTour('skipped')}
+            onHome={() => endTour('skipped')}
+            onClose={closeTour}
             onFinish={() => endTour('completed')}
           />
         </Suspense>

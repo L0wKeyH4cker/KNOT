@@ -95,11 +95,13 @@ test('first-visit tour explains every area, remembers completion and restores th
   );
 });
 
-test('visitors can skip, replay from help, and leave through native Back', async ({ page }) => {
+test('visitors can return home, replay from help, and leave through native Back', async ({
+  page,
+}) => {
   await start(page);
   await page
     .getByTestId('guided-tour')
-    .getByRole('button', { name: 'Skip tour', exact: true })
+    .getByRole('button', { name: 'Back to home', exact: true })
     .click();
   await expect(page.getByTestId('home-page')).toBeVisible();
   await page.reload();
@@ -110,6 +112,94 @@ test('visitors can skip, replay from help, and leave through native Back', async
   await page.goBack();
   await expect(page.getByTestId('guided-tour')).toHaveCount(0);
   await expect(page.getByTestId('home-page')).toBeVisible();
+});
+
+for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+  test(`closing step ${stepIndex + 1} keeps its example page editable and preserves the original project`, async ({
+    page,
+  }) => {
+    const original = JSON.parse(
+      readFileSync(new URL('../../examples/team-research.json', import.meta.url), 'utf8'),
+    );
+    original.project.id = 'original-project-before-close';
+    original.project.name = 'Keep this unfinished project';
+    original.nodes[0].label = 'Keep my original start';
+    await page.addInitScript((workflow) => {
+      localStorage.setItem('knot.current.v1', JSON.stringify(workflow));
+      localStorage.setItem('knot.projects.v1', '[]');
+    }, original);
+    await start(page);
+    const tour = page.getByTestId('guided-tour');
+    for (let index = 0; index < stepIndex; index++)
+      await tour.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(
+      tour.getByRole('heading', { name: steps[stepIndex][0], exact: true }),
+    ).toBeVisible();
+    const url = page.url();
+    await tour.getByRole('button', { name: 'Close tour', exact: true }).click();
+    await expect(tour).toHaveCount(0);
+    expect(page.url()).toBe(url);
+    expect(await page.locator('#root').evaluate((root) => root.inert)).toBe(false);
+    await expect
+      .poll(async () =>
+        page.evaluate(() => JSON.parse(localStorage.getItem('knot.current.v1')!).project.id),
+      )
+      .not.toBe(original.project.id);
+    const library = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('knot.projects.v1')!),
+    );
+    expect(library.find((project: any) => project.project.id === original.project.id)).toEqual(
+      original,
+    );
+    if (steps[stepIndex][1] === '/workspace') {
+      await page.getByTestId('block-research').click();
+      await expect(page.getByLabel('Task instructions', { exact: true })).toBeEditable();
+    } else if (steps[stepIndex][1] === '/workspace/agents') {
+      await expect(page.getByLabel('System prompt', { exact: true })).toBeEditable();
+    } else if (steps[stepIndex][1] === '/workspace/project') {
+      await expect(page.getByLabel('Project goal', { exact: true })).toBeEditable();
+    } else if (steps[stepIndex][1] === '/workspace/designer') {
+      await expect(page.getByLabel('Project goal', { exact: true })).toBeEditable();
+    } else {
+      await expect(
+        page.getByRole('button', { name: 'Export runnable ZIP', exact: true }),
+      ).toBeEnabled();
+    }
+  });
+
+  test(`Back to home on step ${stepIndex + 1} restores the original project`, async ({ page }) => {
+    const original = JSON.parse(
+      readFileSync(new URL('../../examples/team-research.json', import.meta.url), 'utf8'),
+    );
+    original.project.id = 'original-project-before-home';
+    original.project.name = 'Return to my project';
+    await page.addInitScript((workflow) => {
+      localStorage.setItem('knot.current.v1', JSON.stringify(workflow));
+      localStorage.setItem('knot.projects.v1', JSON.stringify([workflow]));
+    }, original);
+    await start(page);
+    const before = await page.evaluate(() => localStorage.getItem('knot.current.v1'));
+    const tour = page.getByTestId('guided-tour');
+    for (let index = 0; index < stepIndex; index++)
+      await tour.getByRole('button', { name: 'Next', exact: true }).click();
+    await tour.getByRole('button', { name: 'Back to home', exact: true }).click();
+    await expect(tour).toHaveCount(0);
+    await expect(page.getByTestId('home-page')).toBeVisible();
+    await expect(page.getByLabel('Describe your project')).toBeFocused();
+    expect(await page.evaluate(() => localStorage.getItem('knot.current.v1'))).toBe(before);
+  });
+}
+
+test('Escape closes the coachmark while keeping the current example page', async ({ page }) => {
+  await start(page);
+  const tour = page.getByTestId('guided-tour');
+  for (let index = 0; index < 4; index++)
+    await tour.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page).toHaveURL(/#\/workspace\/agents$/);
+  await page.keyboard.press('Escape');
+  await expect(tour).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/workspace\/agents$/);
+  await expect(page.getByLabel('System prompt', { exact: true })).toBeEditable();
 });
 
 test('the complete tour keeps its controls inside a small viewport', async ({ page }) => {
