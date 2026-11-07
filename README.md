@@ -56,7 +56,7 @@ python server.py --port 8000
 2. 填写规划模型的 API 模型 ID，点击 **Analyze requirements**。模型会整理项目目标、交付物、具体任务、验收要求，以及还缺少的信息。
 3. 检查并修改任务清单，点击 **Generate workflow from requirements**。生成的积木和连线可以继续编辑；一次 Undo 可恢复生成前的工作流。
 
-上传和文字提取在本地完成，不需要 API key。点击分析、生成时才调用配置的规划模型。支持带可选择文字的 PDF；扫描件尚未提供 OCR，会明确提示换用文本 PDF 或粘贴文字。单个文件最多 5 MiB、PDF 最多 40 页、提取文字最多 60,000 字符，超过限制会提示，不会悄悄截断。
+上传和文字提取在本地完成，不需要 API key。点击分析、生成或测试连接时才调用配置的模型。支持带可选择文字的 PDF；扫描件尚未提供 OCR，会明确提示换用文本 PDF 或粘贴文字。单个文件最多 5 MiB、PDF 最多 40 页、提取文字最多 60,000 字符，超过限制会提示，不会悄悄截断。
 
 生成后，需求原文和确认后的任务清单会作为项目材料保存，随工作流 JSON 和运行包 ZIP 一起导出；不附带原始 PDF。只上传或关闭弹窗不会修改现有画布。完整操作和限制见 [需求文件使用说明](docs/REQUIREMENTS.md)。
 
@@ -78,11 +78,13 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 
 规划模型负责生成结构化草案；任务 Agent 各自使用单独配置的模型连接。支持 OpenAI Chat Completions 与 Anthropic Messages 两种 API 适配方式，模型名称由用户填写。
 
-工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY`，不要把真实 key 放进节点、prompt、JSON 或浏览器。真实 key 在启动后端或运行包的环境中配置；参考 `.env.example` 和导出包内的 `.env.example`。
+工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY`，不要把真实 key 放进节点、prompt 或 JSON。模型设置中的 **API key → Save on this device** 会将凭证保存到本机 `.env.local` 并立即生效；密码框随后清空，浏览器本地存储和导出 ZIP 不包含 key。也可以自行设置后端环境变量。
+
+选择 **DeepSeek** 会自动填写官方 API 地址、`DEEPSEEK_API_KEY` 引用和 `deepseek-flash` 模型 ID；可按账号实际支持的模型修改。DeepSeek 使用现有 OpenAI-compatible 适配器，工作流 schema 不变。参考 [DeepSeek 官方接入说明](https://api-docs.deepseek.com/)。点击 **Test connection** 会发送一条最多 16 个输出 token 的简短测试请求，验证服务商是否接受当前 key、模型和地址；测试不发送项目材料。
 
 模型字段必须填写 API 模型 ID。例如 GPT-6 Luna 的 ID 是 `gpt-6-luna`，不能填写带空格的展示名称 `GPT-6 Luna`。规划模型和 Agent 的模型字段都遵守这一规则；参见 [OpenAI 官方模型说明](https://developers.openai.com/api/docs/models/gpt-6-luna)。页面显示 `Credential detected` 只代表配置中有 key，不代表生成请求已成功。
 
-开发后端优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。运行包使用自己的 `.env`。编辑器只有凭证引用输入框，不接收或展示真实 key。
+开发后端启动时优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。在设置页显式保存的新 key 会更新当前后端进程和 `.env.local`，无需重启。规划模型的非敏感连接设置保存在当前浏览器中。下载的运行包使用自己的 `.env`，凭证需在运行包所在电脑另外配置。
 
 - **mock**：固定示例结果，验证调度、条件、权限和人工审核，不调用收费 API。
 - **real**：调用真实 API。缺少模型、凭证或 API 调用失败时明确报错，不会切换到 mock。

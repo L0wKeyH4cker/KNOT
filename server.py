@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 from backend.bundle import BundleError, build_bundle, reject_secrets
 from backend.documents import DocumentError, extract_document
+from backend.connections import credential_status, save_credential, test_connection, DEEPSEEK_CONNECTION
 from backend.planner import PlanningError, plan_workflow
 from backend.template import load_template
 from runtime.validation import validate_workflow
@@ -65,7 +66,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         if path == "/api/health":
-            self.send_json(200, {"ok": True, "planner_credentials": {key: bool(os.environ.get(key, "").strip()) for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")}})
+            credentials = credential_status(ROOT)
+            self.send_json(200, {"ok": True, "planner_credentials": credentials,
+                                 "default_planner": DEEPSEEK_CONNECTION if credentials.get("DEEPSEEK_API_KEY") else None})
         elif path == "/api/template":
             self.send_json(200, load_template())
         elif path.startswith("/api/"):
@@ -111,7 +114,11 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(size).decode("utf-8"))
             if not isinstance(body, dict):
                 raise ValueError("请求必须是 JSON 对象。")
-            if path in ("/api/validate", "/api/export"):
+            if path == "/api/credentials":
+                self.send_json(200, {"credentials": save_credential(ROOT, body.get("credential_ref"), body.get("key"))})
+            elif path == "/api/connection/test":
+                self.send_json(200, test_connection(body.get("connection")))
+            elif path in ("/api/validate", "/api/export"):
                 workflow = body.get("workflow")
                 if not isinstance(workflow, dict):
                     raise ValueError("缺少工作流对象。")

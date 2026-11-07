@@ -236,12 +236,11 @@ test('AI is honest when credentials are absent; task model and planner are separ
 }) => {
   await openTemplate(page);
   await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+  await page.getByText('Advanced connection settings', { exact: true }).click();
   await page
     .getByLabel('Credential environment variable', { exact: true })
     .fill('TEAMBLOCKS_TEST_MISSING_KEY');
-  await expect(
-    page.getByText('No credential detected. Real AI generation is unavailable until configured.'),
-  ).toBeVisible();
+  await expect(page.getByText('Not configured', { exact: true })).toBeVisible();
   await page.getByLabel('Planning model', { exact: true }).fill('user-configured-model');
   await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
   await expect(page.getByRole('status')).toContainText(/credential|key|configure|未配置|凭证/i);
@@ -263,6 +262,46 @@ test('template exports from browser and keeps review before delivery; no browser
   await (await d).saveAs(resolve(artifactDir, 'template-runner.zip'));
   await expect(page.getByText('Take your team’s workflow with you.')).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('DeepSeek setup saves credentials separately and tests the selected compatible connection (API fixtures)', async ({
+  page,
+}) => {
+  const fixtureKey = 'browser-connection-fixture-only';
+  await page.route('**/api/health', (route) =>
+    route.fulfill({ json: { ok: true, planner_credentials: { DEEPSEEK_API_KEY: false } } }),
+  );
+  await page.route('**/api/credentials', async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      credential_ref: 'DEEPSEEK_API_KEY',
+      key: fixtureKey,
+    });
+    await route.fulfill({ json: { credentials: { DEEPSEEK_API_KEY: true } } });
+  });
+  await page.route('**/api/connection/test', async (route) => {
+    expect(route.request().postDataJSON().connection).toEqual({
+      provider: 'openai',
+      model: 'deepseek-flash',
+      credential_ref: 'DEEPSEEK_API_KEY',
+      base_url: 'https://api.deepseek.com',
+    });
+    await route.fulfill({ json: { ok: true, message: 'Connection verified by test fixture.' } });
+  });
+  await openTemplate(page);
+  await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+  await page.getByLabel('Planning provider', { exact: true }).selectOption('deepseek');
+  await expect(page.getByLabel('Planning model', { exact: true })).toHaveValue('deepseek-flash');
+  await page.getByLabel('API key', { exact: true }).fill(fixtureKey);
+  await page.getByRole('button', { name: 'Save on this device', exact: true }).click();
+  await expect(page.getByLabel('API key', { exact: true })).toHaveValue('');
+  await expect(page.getByText('Saved on this device', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Test connection', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Connection verified by test fixture.');
+  await page.reload();
+  await expect(page.getByLabel('Planning provider', { exact: true })).toHaveValue('deepseek');
+  await expect(page.getByLabel('Planning model', { exact: true })).toHaveValue('deepseek-flash');
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  expect(JSON.stringify(await getWorkflow(page))).not.toContain(fixtureKey);
 });
 
 test('small screen keeps controls usable without document overflow', async ({ page }) => {

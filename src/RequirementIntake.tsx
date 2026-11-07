@@ -22,6 +22,7 @@ type Props = {
   planner: Planner;
   setPlanner: (p: Planner) => void;
   credentials: Record<string, boolean>;
+  onCredentialsChange: (credentials: Record<string, boolean>) => void;
   busy: boolean;
   generate: (candidate: Workflow) => Promise<void>;
 };
@@ -39,6 +40,7 @@ export default function RequirementIntake({
   planner,
   setPlanner,
   credentials,
+  onCredentialsChange,
   busy,
   generate,
 }: Props) {
@@ -375,6 +377,7 @@ export default function RequirementIntake({
             planner={planner}
             setPlanner={setPlanner}
             credentials={credentials}
+            onCredentialsChange={onCredentialsChange}
             busy={locked}
             generate={() => void build(false)}
             hasNodes={!!wf.nodes.length}

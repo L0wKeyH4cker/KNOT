@@ -33,7 +33,9 @@ Supported tools: `read_text`, `read_csv`, `summarize_csv`, `write_file`. No shel
 Python modules: `runtime/validation.py` exposes `validate_workflow(workflow, mode='mock') -> list[dict]` issues `{severity:'error'|'warning',code,message,node_id?:str}`; `runtime/engine.py` exposes CLI via `run.py` and reusable engine (agent documents its API). Provider adapter in `runtime/providers.py`. Python 3.10+ stdlib preferred.
 
 HTTP backend `server.py`, port 8000, loopback only. Routes:
-- GET /api/health -> {ok:true,planner_credentials:{OPENAI_API_KEY:boolean,ANTHROPIC_API_KEY:boolean}}
+- GET /api/health -> {ok:true,planner_credentials:{OPENAI_API_KEY:boolean,ANTHROPIC_API_KEY:boolean,DEEPSEEK_API_KEY:boolean,...},default_planner:connection|null}. Only configuration and boolean availability, never credential values.
+- POST /api/credentials body {credential_ref,key} -> {credentials:{[ref]:boolean}}. Local-only credential configuration: atomically save in ignored .env.local (owner-only file permissions), activate in the backend, never return key values.
+- POST /api/connection/test body {connection:{provider,model,credential_ref,base_url}} -> {ok,model,message}. At most 16 output tokens, generic test prompt only; preserve safe provider error diagnostics.
 - GET /api/template -> Workflow
 - POST /api/validate body {workflow,mode} -> {issues}
 - POST /api/export body {workflow} -> application/zip; fatal invalid graph rejects 400; missing model/key WARN for mock export.
@@ -42,4 +44,4 @@ HTTP backend `server.py`, port 8000, loopback only. Routes:
 
 Exporter in `backend/bundle.py`, function `build_bundle(workflow)->bytes`. Bundle root includes workflow.json, run.py, runtime/, prompts/, inputs/, requirements.txt (stdlib comment allowed), .env.example, start.bat, start.sh, README.md. No secrets or external backend dependency. Export checks disallow credential literals and path escape. Demo `examples/team-research.json` contains start, shared resource, parallel, 2 task branches, synthesis task, human review, output, report.md and summary.csv mappings. Data edges must match runtime inputs.
 
-Frontend only stores credential REFERENCES, never secrets. Planner models configured separately from agents. Nodes and edges preserve entire schema, undo/redo and local autosave. Two creation routes lead to same canvas. Template distinctly labeled.
+Workflow JSON and browser persistence store credential REFERENCES, never secrets. A separate password input sends an explicitly entered key only to the local credentials endpoint, then clears it. DeepSeek presets use provider openai with its own base_url and DEEPSEEK_API_KEY reference. Planner models remain configured separately from agents. Nodes and edges preserve the entire schema, undo/redo and local autosave. Two creation routes lead to the same canvas. Template distinctly labeled.

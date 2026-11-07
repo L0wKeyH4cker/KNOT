@@ -63,7 +63,28 @@ import {
 import type { Workflow, Block, NodeKind, Link, Issue } from './model';
 const nodeTypes = { block: BlockNode };
 const STORAGE = 'teamblocks.current.v1',
-  LIBRARY = 'teamblocks.projects.v1';
+  LIBRARY = 'teamblocks.projects.v1',
+  PLANNER = 'teamblocks.planner.v1';
+function readPlanner(): Planner | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(PLANNER) || 'null');
+    if (
+      !value ||
+      !['openai', 'anthropic'].includes(value.provider) ||
+      !['model', 'credential_ref', 'base_url'].every((key) => typeof value[key] === 'string')
+    )
+      return null;
+    assertSafeWorkflow(value);
+    return {
+      provider: value.provider,
+      model: value.model,
+      credential_ref: value.credential_ref,
+      base_url: value.base_url,
+    };
+  } catch {
+    return null;
+  }
+}
 function restore() {
   try {
     const raw = localStorage.getItem(STORAGE);
@@ -136,12 +157,17 @@ export default function App() {
     [savedStatus, setSavedStatus] = useState('Saved on this device'),
     [historyTick, setHistoryTick] = useState(0),
     [savedProjects, setSavedProjects] = useState<Workflow[]>(readProjects);
-  const [planner, setPlanner] = useState<Planner>({
-    provider: 'openai',
-    model: '',
-    credential_ref: 'OPENAI_API_KEY',
-    base_url: '',
-  });
+  const [planner, setPlanner] = useState<Planner>(
+    () =>
+      readPlanner() || {
+        provider: 'openai',
+        model: '',
+        credential_ref: 'OPENAI_API_KEY',
+        base_url: '',
+      },
+  );
+  const [plannerReady, setPlannerReady] = useState(() => !!readPlanner());
+  const plannerInitialized = useRef(plannerReady);
   const [draft, setDraft] = useState({ name: '', members: 3, goal: '', deliverable: '' });
   const [intakeProject, setIntakeProject] = useState<Workflow | null>(null);
   const past = useRef<Workflow[]>([]),
@@ -204,13 +230,31 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [wf]);
   useEffect(() => {
-    api<{ ok: boolean; planner_credentials: Record<string, boolean> }>('health')
+    api<{
+      ok: boolean;
+      planner_credentials: Record<string, boolean>;
+      default_planner?: Planner | null;
+    }>('health')
       .then((x) => {
         setOnline(x.ok);
         setCredentials(x.planner_credentials || {});
+        if (!plannerInitialized.current) {
+          if (x.default_planner) setPlanner(x.default_planner);
+          plannerInitialized.current = true;
+          setPlannerReady(true);
+        }
       })
       .catch(() => setOnline(false));
   }, [modal]);
+  useEffect(() => {
+    if (!plannerReady) return;
+    try {
+      assertSafeWorkflow(planner);
+      localStorage.setItem(PLANNER, JSON.stringify(planner));
+    } catch {
+      /* The connection remains usable if browser storage is unavailable. */
+    }
+  }, [planner, plannerReady]);
   const fit = () =>
     requestAnimationFrame(() =>
       setTimeout(() => flow.fitView({ padding: 0.2, duration: 350, maxZoom: 1 }), 60),
@@ -1150,7 +1194,14 @@ export default function App() {
               </button>
             </div>
             <div className="modal-body">
-              {modal === 'agents' && <AgentsSettings wf={wf} change={change} />}
+              {modal === 'agents' && (
+                <AgentsSettings
+                  wf={wf}
+                  change={change}
+                  credentials={credentials}
+                  onCredentialsChange={setCredentials}
+                />
+              )}
               {modal === 'project' && <ProjectSettings wf={wf} change={change} />}
               {modal === 'planner' && (
                 <RequirementIntake
@@ -1163,12 +1214,15 @@ export default function App() {
                           'Use an uppercase environment variable name, never an API key.',
                         );
                       assertSafeWorkflow(p);
+                      plannerInitialized.current = true;
+                      setPlannerReady(true);
                       setPlanner(p);
                     } catch (e) {
                       notify((e as Error).message);
                     }
                   }}
                   credentials={credentials}
+                  onCredentialsChange={setCredentials}
                   busy={busy === 'plan'}
                   generate={generate}
                 />

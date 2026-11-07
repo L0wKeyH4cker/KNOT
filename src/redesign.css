@@ -704,6 +704,85 @@ select:focus {
   border-color: #dfe5f5;
 }
 
+.connection-key-card {
+  padding: 18px;
+  margin: 8px 0 18px;
+  border: 1px solid #e1e6f3;
+  border-radius: 11px;
+  background: #f8f9fd;
+}
+
+.connection-key-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #6678ac;
+  margin-bottom: 16px;
+}
+
+.connection-key-heading strong {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.key-state {
+  margin-left: auto;
+  font-size: 10px;
+  color: #9b8b70;
+}
+
+.key-state.ready {
+  color: #558172;
+}
+
+.connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.connection-actions button {
+  font-size: 12px;
+}
+
+.connection-test-hint {
+  margin-top: 12px;
+  color: #949bb0;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.connection-advanced {
+  color: #7c87a5;
+  font-size: 12px;
+  margin: 18px 0;
+}
+
+.connection-advanced summary {
+  cursor: pointer;
+  margin-bottom: 18px;
+}
+
+.connection-feedback {
+  display: flex;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 16px 0;
+}
+
+.connection-feedback.success {
+  background: #eef7f2;
+  color: #4a7e67;
+}
+
+.connection-feedback.error {
+  background: #fff1ee;
+  color: #ac6053;
+}
+
 @media (max-width: 1100px) {
   .modal-body,
   .modal-agents .modal-body {
