@@ -81,6 +81,8 @@ def _extract_pdf_subprocess(raw):
         "SYSTEMROOT", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP", "PYTHONPATH", "PYTHONHOME",
         "LANG", "LC_ALL", "KNOT_PDF_MEMORY_MB",
     }}
+    # Make dependencies visible to the worker even when the host adds them via sys.path (e.g. Vercel).
+    environment["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
     try:
         completed = subprocess.run(
             [sys.executable, "-B", "-m", "backend.documents", "--extract-pdf"],
