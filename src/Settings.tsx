@@ -36,7 +36,6 @@ export function AgentsSettings({
             </span>
             <span>
               <strong>{x.name}</strong>
-              <small>{x.role}</small>
             </span>
           </button>
         ))}
@@ -51,9 +50,6 @@ export function AgentsSettings({
           <Plus size={16} />
           New agent
         </button>
-        <p className="muted small">
-          Agents and people are separate. Reuse an agent across any number of tasks.
-        </p>
       </div>
       <div className="agent-editor">
         {a ? (
@@ -102,15 +98,14 @@ export function AgentsSettings({
             </Field>
             <div className="note">
               <ShieldCheck size={16} />
-              Tools also need permission on each task. Credentials are configured locally when you
-              run the package.
+              Enable tools on both the agent and its assigned tasks.
             </div>
           </>
         ) : (
           <div className="empty-panel">
             <Bot size={40} />
-            <h3>A role for every kind of work.</h3>
-            <p>Create your first agent, then assign it to a task.</p>
+            <h3>Add your first agent</h3>
+            <p>Assign it to tasks on your canvas.</p>
           </div>
         )}
       </div>
@@ -227,9 +222,8 @@ export function ProjectSettings({ wf, change }: { wf: Workflow; change: (w: Work
         <FolderOpen size={16} />
         Input resources
       </div>
-      <p className="muted small">
-        Text entered here is included in the ZIP. Leave content empty for a file you will add
-        locally before running.
+      <p className="muted">
+        Content is included in the ZIP; leave it blank to add the file before running.
       </p>
       {wf.resources.map((r) => (
         <div className="resource-editor" key={r.id}>
@@ -357,12 +351,7 @@ export function PlannerSettings({
     <div className="planner-content">
       {!configurationOnly && (
         <div className="planner-hero">
-          <span className="ai-orbit">✦</span>
-          <h3>A starting point, made for your team.</h3>
-          <p>
-            Turn your project brief into an editable workflow. You stay in charge of every block,
-            connection, and permission.
-          </p>
+          <h3>Generate a workflow</h3>
         </div>
       )}
       <ConnectionSettings
@@ -375,8 +364,8 @@ export function PlannerSettings({
       />
       {!configurationOnly && (
         <>
-          <p className="muted small">
-            The planning model is independent of execution agents.{' '}
+          <p className="muted">
+            This model plans the workflow; task agents run it.{' '}
             {hasNodes ? 'Generating replaces this canvas; undo restores the previous version.' : ''}
           </p>
           <button

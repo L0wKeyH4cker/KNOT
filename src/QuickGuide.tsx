@@ -18,7 +18,6 @@ const steps = [
     label: 'The canvas',
     image: 'canvas',
     alt: 'The Campus, reimagined example on the workflow canvas, from Start to Output.',
-    caption: 'One shared view of your team’s work.',
     tips: [
       'Follow the example from left to right: inputs, parallel research, a combined report, and human review.',
       'Drag the background to pan. Use the zoom controls or Fit View to see the whole workflow.',
@@ -29,7 +28,6 @@ const steps = [
     label: 'Building blocks',
     image: 'blocks',
     alt: 'The building block library with Start, Agent Task, Shared Resource, Parallel, Condition, Human Review, and Output.',
-    caption: 'Pick a block for the job you need.',
     tips: [
       'Drag a block from the left-hand library onto the canvas, or click to add one.',
       'Use Human Review before Output when a teammate should approve the final result.',
@@ -40,7 +38,6 @@ const steps = [
     label: 'Connections',
     image: 'connections',
     alt: 'Two parallel tasks joined by solid execution connections and dashed data connections.',
-    caption: 'Set the order. Share the right results.',
     tips: [
       'Connect side ports to set execution order. Connect top and bottom data ports to share results.',
       'A report task can wait for both research branches. A data connection grants access to that upstream result.',
@@ -51,7 +48,6 @@ const steps = [
     label: 'Task settings',
     image: 'task',
     alt: 'The Understand the people task with its assigned agent, human owner, instructions, and acceptance criteria.',
-    caption: 'A clear brief makes a useful task.',
     tips: [
       'Select a block to choose its agent and human owner, then write task instructions and acceptance criteria.',
       'Choose an output format. Enable only the tools and file paths that this task needs.',
@@ -62,7 +58,6 @@ const steps = [
     label: 'Your AI team',
     image: 'agents',
     alt: 'The agent settings page showing Research partner, an English system prompt, and model connection settings.',
-    caption: 'Different roles. One team.',
     tips: [
       'Give each agent a role and system prompt, then choose its provider and API model ID.',
       'Save a key on this computer and test the connection when you are ready. Keys stay out of exported workflows.',
@@ -73,7 +68,6 @@ const steps = [
     label: 'People & inputs',
     image: 'project',
     alt: 'Project settings with the campus travel goal, deliverable, three team members, and example interview resources.',
-    caption: 'Keep the context close to the work.',
     tips: [
       'Set the project goal and final deliverable, then add your teammates and their skills.',
       'Add text or CSV resources here and connect a Shared Resource block to the tasks that need them.',
@@ -84,7 +78,6 @@ const steps = [
     label: 'AI designer',
     image: 'planner',
     alt: 'The AI workflow designer with a requirements upload area and a project brief.',
-    caption: 'Start with a brief, then make it yours.',
     tips: [
       'Upload project requirements or describe your goal. Select and configure a planning model.',
       'Review the proposed tasks before generating the workflow. Every block stays editable on the canvas.',
@@ -95,7 +88,6 @@ const steps = [
     label: 'Workflow check',
     image: 'check',
     alt: 'Workflow check results showing that the example can run in mock mode and needs model configuration for real mode.',
-    caption: 'Know what is ready and what needs attention.',
     tips: [
       'Use Check to review connections, task configuration, and permissions before exporting.',
       'The example works in mock mode straight away. Real mode also needs model IDs and local credentials.',
@@ -106,7 +98,6 @@ const steps = [
     label: 'Export & run',
     image: 'export',
     alt: 'The export confirmation with instructions to extract the runner, try mock mode, and configure real models.',
-    caption: 'Your workflow, ready for its next chapter.',
     tips: [
       'Export runner downloads a ZIP with your workflow, Python runner, prompts, inputs, and setup instructions.',
       'Extract it to a new folder and follow the included launch instructions. Human Review pauses delivery until the assigned person approves.',
@@ -156,10 +147,7 @@ export default function QuickGuide({
   return (
     <div className="quick-guide" data-testid="quick-guide">
       <div className="guide-intro">
-        <div>
-          <span className="guide-eyebrow">SEE IT. TRY IT. MAKE IT YOURS.</span>
-          <p>A visual walkthrough, one small step at a time.</p>
-        </div>
+        <p>Explore the example, one step at a time.</p>
         <button className="secondary guide-tour-button" disabled={busy} onClick={onTour}>
           <MousePointer2 size={15} aria-hidden="true" /> Take a guided tour
           <ArrowRight size={15} aria-hidden="true" />
@@ -189,9 +177,8 @@ export default function QuickGuide({
         <section ref={card} className="guide-card" aria-labelledby={headingId}>
           <div className="guide-card-top">
             <span className="guide-eyebrow" role="status">
-              STEP {String(index + 1).padStart(2, '0')} OF {String(steps.length).padStart(2, '0')}
+              Step {index + 1} of {steps.length}
             </span>
-            <span className="guide-example-label">Campus, reimagined · Example</span>
           </div>
           <div className="guide-stage">
             <figure className={`guide-figure guide-figure-${step.id}`}>
@@ -205,14 +192,11 @@ export default function QuickGuide({
                   <Maximize2 size={13} /> Enlarge
                 </span>
               </button>
-              <figcaption>{step.caption}</figcaption>
             </figure>
             <div className="guide-copy" key={step.id}>
-              <span className="guide-chapter">{step.label}</span>
               <h3 ref={heading} id={headingId} tabIndex={-1}>
                 {copy.title}
               </h3>
-              <p>{copy.description}</p>
               <ul>
                 {step.tips.map((tip) => (
                   <li key={tip}>
@@ -309,7 +293,6 @@ export default function QuickGuide({
         <div className="guide-image-scroll">
           <img src={image} alt={step.alt} />
         </div>
-        <p>{step.caption}</p>
       </dialog>
     </div>
   );

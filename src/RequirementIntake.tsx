@@ -115,7 +115,7 @@ export default function RequirementIntake({
   const listField = (
     label: string,
     key: 'deliverables' | 'constraints' | 'missing_information',
-    hint: string,
+    hint?: string,
   ) =>
     analysis && (
       <Field label={label} hint={hint}>
@@ -130,12 +130,7 @@ export default function RequirementIntake({
   return (
     <div className="requirements-designer">
       <div className="requirements-intro">
-        <span className="eyebrow">FROM REQUIREMENTS TO ACTION</span>
-        <h3>Your project brief. A plan your team can use.</h3>
-        <p>
-          Upload the requirement document. AI finds the work, deliverables, and constraints, then
-          turns them into an editable workflow.
-        </p>
+        <h3>Turn requirements into a workflow</h3>
       </div>
       <ol className="intake-steps" aria-label="Requirement workflow steps">
         <li className={!document ? 'active' : 'done'}>
@@ -192,7 +187,7 @@ export default function RequirementIntake({
         </strong>
         <span>
           {document
-            ? `${document.page_count} page(s) · ${document.text.length.toLocaleString()} characters · Click to replace`
+            ? `${document.page_count} page(s) · Click to replace`
             : 'Drop a file here or click to browse'}
         </span>
         <small>PDF, TXT, or Markdown · up to 5 MiB · PDF up to 40 pages</small>
@@ -223,7 +218,7 @@ export default function RequirementIntake({
           ))}
           <Field
             label="Extracted requirement text"
-            hint="Check the extracted text. Editing it clears the AI analysis so the tasks stay in sync."
+            hint="Editing this text clears the analysis; analyze again to update the tasks."
           >
             <textarea
               className="document-preview"
@@ -249,9 +244,8 @@ export default function RequirementIntake({
             )}
             {phase === 'analyze' ? 'Finding tasks and deliverables…' : 'Analyze requirements'}
           </button>
-          <p className="muted small">
-            Text extraction runs locally. Analyze sends the extracted text to your configured
-            planning model.
+          <p className="muted">
+            Extraction stays local. Analysis sends this text to your planning model.
           </p>
         </div>
       )}
@@ -283,7 +277,7 @@ export default function RequirementIntake({
                 <small>
                   {task.source_pages.length
                     ? `Source: page ${task.source_pages.join(', ')}`
-                    : 'Source: document context / user review'}
+                    : 'Source: document or your edits'}
                 </small>
                 <button
                   className="icon-button"
@@ -336,16 +330,8 @@ export default function RequirementIntake({
           >
             <Plus size={15} /> Add task
           </button>
-          {listField(
-            'Project constraints',
-            'constraints',
-            'One constraint per line. Remove any incorrect assumptions.',
-          )}
-          {listField(
-            'Missing information',
-            'missing_information',
-            'Unanswered questions remain visible to the workflow planner.',
-          )}
+          {listField('Project constraints', 'constraints', 'One constraint per line.')}
+          {listField('Missing information', 'missing_information')}
         </div>
       )}
       {!document && (
@@ -391,7 +377,7 @@ export default function RequirementIntake({
       {(analysis || !document) && (
         <div className="requirement-actions">
           {!!wf.nodes.length && (
-            <p className="muted small">
+            <p className="muted">
               Generating replaces this canvas. Undo restores the previous version.
             </p>
           )}

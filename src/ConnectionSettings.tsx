@@ -88,14 +88,7 @@ export default function ConnectionSettings({
             ))}
           </select>
         </Field>
-        <Field
-          label={planning ? 'Planning model' : 'Model name'}
-          hint={
-            preset === 'deepseek'
-              ? 'DeepSeek model ID. You can use another model available to your account.'
-              : 'Enter the API model ID from your provider.'
-          }
-        >
+        <Field label={planning ? 'Planning model' : 'Model name'}>
           <input
             value={connection.model}
             disabled={locked}
@@ -107,7 +100,7 @@ export default function ConnectionSettings({
       <div className="connection-key-card">
         <div className="connection-key-heading">
           <KeyRound size={16} />
-          <strong>API key</strong>
+          <strong>Connection</strong>
           <span className={configured === true ? 'key-state ready' : 'key-state'}>
             {configured === true
               ? 'Saved on this device'
@@ -118,7 +111,7 @@ export default function ConnectionSettings({
         </div>
         <Field
           label="API key"
-          hint="Saved only to this computer. Never included in your workflow or exported ZIP."
+          hint="Stored on this computer only; excluded from workflows and exports."
         >
           <input
             type="password"
@@ -155,17 +148,13 @@ export default function ConnectionSettings({
             Test connection
           </button>
         </div>
-        <p className="connection-test-hint">
-          Connection tests send a short request to the selected model.
-          {configured === undefined &&
-            ' This credential reference has not been checked. The backend will check it when you test or run a request.'}
-        </p>
+        <p className="connection-test-hint">Tests send a short request to your selected model.</p>
       </div>
       <details className="connection-advanced" open={preset === 'custom' || undefined}>
         <summary>Advanced connection settings</summary>
         <Field
           label={planning ? 'Credential environment variable' : 'Credential reference'}
-          hint="Variable name only. Paste the actual key in the API key field above."
+          hint="Use the environment variable name, e.g. OPENAI_API_KEY."
         >
           <input
             value={connection.credential_ref}

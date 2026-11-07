@@ -76,20 +76,7 @@ export default function Home({
           <h1>
             Your idea. <span>A team in motion.</span>
           </h1>
-          <p>What would you like to work on together?</p>
         </div>
-
-        <a
-          className="home-github"
-          href="https://github.com/L0wKeyH4cker/KNOT"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="View KNOT on GitHub (opens in a new tab)"
-        >
-          <Github size={16} aria-hidden="true" />
-          View on GitHub
-          <ArrowUpRight size={14} aria-hidden="true" />
-        </a>
 
         <form
           className="idea-composer"
@@ -101,7 +88,7 @@ export default function Home({
           <textarea
             ref={composer}
             aria-label="Describe your project"
-            placeholder="A research project, a big question, your next idea…"
+            placeholder="Describe what you want your team to do…"
             value={idea}
             maxLength={10000}
             rows={3}
@@ -142,7 +129,6 @@ export default function Home({
             disabled={busy}
             onClick={onExample}
           >
-            {firstVisit && <span className="example-start-badge">START HERE</span>}
             {firstVisit ? 'Explore an example' : 'Or explore an example'} <ArrowRight size={14} />
           </button>
           {firstVisit && (
@@ -158,7 +144,7 @@ export default function Home({
         {projects.length > 0 && (
           <section className="home-recent" aria-label="Recent projects">
             <div className="recent-heading">
-              <h2>Pick up where you left off</h2>
+              <h2>Recent projects</h2>
               <button onClick={onProjects}>
                 View all <ChevronRight size={13} />
               </button>
@@ -173,7 +159,6 @@ export default function Home({
                   <Blocks size={17} />
                 </span>
                 <span className="recent-name">{project.project.name}</span>
-                <span className="recent-meta">{project.project.members.length} members</span>
                 <ArrowRight size={15} />
               </button>
             ))}
@@ -182,7 +167,17 @@ export default function Home({
       </main>
 
       <footer className="home-footer">
-        <span>A little structure. A lot of possibility.</span>
+        <a
+          className="home-github"
+          href="https://github.com/L0wKeyH4cker/KNOT"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="View KNOT on GitHub (opens in a new tab)"
+        >
+          <Github size={18} aria-hidden="true" />
+          GitHub
+          <ArrowUpRight size={16} aria-hidden="true" />
+        </a>
         <button onClick={onHelp}>
           A quick guide <ArrowRight size={13} />
         </button>
