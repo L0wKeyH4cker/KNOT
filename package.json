@@ -1,0 +1,31 @@
+{
+  "name": "teamblocks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test:browser": "playwright test",
+    "test:model": "node --experimental-strip-types --test tests/model-validation.test.mjs tests/requirements-validation.test.mjs",
+    "format": "prettier --write src tests/browser scripts/dev.mjs *.ts *.json index.html"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.10.0",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.4",
+    "prettier": "3.9.10",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}

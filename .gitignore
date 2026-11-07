@@ -1,0 +1,52 @@
+# Credentials and local configuration (commit only empty examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+.netrc
+.npmrc
+.aws/
+.ssh/
+.codex/
+.agents/
+
+# Dependencies and generated builds
+node_modules/
+dist/
+.venv/
+venv/
+.tools/
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+
+# Local runs, uploaded/generated documents, and test evidence
+artifacts/
+uploads/
+inputs/
+logs/
+results/
+*.log
+test-results/
+playwright-report/
+.test-tmp/
+.disk-cleanup/
+.pytest_cache/
+.coverage
+coverage/
+
+# Personal editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*.bak

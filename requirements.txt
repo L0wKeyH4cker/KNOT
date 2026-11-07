@@ -1,0 +1,2 @@
+# Python 3.10 or newer. PDF intake uses pypdf; the exported runner remains stdlib-only.
+pypdf==7.0.0

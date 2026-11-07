@@ -1,0 +1,403 @@
+{
+  "schema_version": "1.0",
+  "project": {
+    "id": "campus-mobility-demo",
+    "name": "Campus, reimagined",
+    "goal": "为三人小组制定校园可持续出行建议。分析示例访谈和出行调查，合并证据，由成员审核后交付简明报告与统计表。",
+    "deliverable": "一份附有样本限制和行动建议的 report.md，以及出行比例 summary.csv。",
+    "members": [
+      {
+        "id": "member-1",
+        "name": "Member A",
+        "skills": ""
+      },
+      {
+        "id": "member-2",
+        "name": "Member B",
+        "skills": ""
+      },
+      {
+        "id": "member-3",
+        "name": "Member C",
+        "skills": ""
+      }
+    ]
+  },
+  "agents": [
+    {
+      "id": "researcher",
+      "name": "Research partner",
+      "role": "研究与证据整理",
+      "system_prompt": "你是团队的资料研究员。只依据显式提供的输入资料提炼观点，不声称开展过真实访谈，不编造来源。输出简明的 Markdown 发现与限制。",
+      "provider": "openai",
+      "model": "",
+      "credential_ref": "OPENAI_API_KEY",
+      "tools": []
+    },
+    {
+      "id": "analyst",
+      "name": "Data partner",
+      "role": "数据分析",
+      "system_prompt": "你是团队的数据分析员。分析显式提供的出行调查 CSV。返回 JSON 对象，包含 content 简述与 data 数组；data 每行有 mode, students, share_percent。明确所有数据都是演示样本。",
+      "provider": "anthropic",
+      "model": "",
+      "credential_ref": "ANTHROPIC_API_KEY",
+      "tools": []
+    },
+    {
+      "id": "editor",
+      "name": "Story partner",
+      "role": "报告汇总",
+      "system_prompt": "你是负责汇总的编辑。将上游研究与统计结果写成 Markdown 报告。包含目标、证据、建议、样本限制和下一步。不要伪造未提供的材料。",
+      "provider": "openai",
+      "model": "",
+      "credential_ref": "OPENAI_API_KEY",
+      "tools": []
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "label": "A better way to campus",
+      "position": {
+        "x": 40,
+        "y": 240
+      },
+      "config": {}
+    },
+    {
+      "id": "resources",
+      "type": "shared_resource",
+      "label": "Example research kit",
+      "position": {
+        "x": 340,
+        "y": 240
+      },
+      "config": {
+        "resource_ids": [
+          "interviews",
+          "survey"
+        ]
+      }
+    },
+    {
+      "id": "parallel",
+      "type": "parallel",
+      "label": "Explore two perspectives",
+      "position": {
+        "x": 640,
+        "y": 240
+      },
+      "config": {}
+    },
+    {
+      "id": "research",
+      "type": "agent_task",
+      "label": "Understand the people",
+      "position": {
+        "x": 940,
+        "y": 80
+      },
+      "config": {
+        "agent_id": "researcher",
+        "owner_id": "member-1",
+        "instructions": "阅读输入中的示例访谈，归纳出行障碍、两项行动机会和证据限制。",
+        "acceptance": "只使用提供的示例资料，清楚区分事实和建议；标注样本限制。",
+        "output_format": "markdown",
+        "permissions": {
+          "read": [],
+          "write": []
+        },
+        "tools": [],
+        "mock_delay_ms": 400,
+        "mock_result": {
+          "content": "# Example interview findings\n\nThis is a fixed MOCK result from fictional teaching material.\n\n- Covered bike parking is limited near the library.\n- Students want clearer bus departure information.\n- A four-week bike-parking and information pilot is a reasonable next step.\n\nLimit: these fictional interviews are not representative evidence.",
+          "data": {
+            "themes": [
+              "bike parking",
+              "bus information"
+            ],
+            "sample_type": "fictional example"
+          }
+        },
+        "join_rule": "all_selected"
+      }
+    },
+    {
+      "id": "analysis",
+      "type": "agent_task",
+      "label": "Make sense of the data",
+      "position": {
+        "x": 940,
+        "y": 400
+      },
+      "config": {
+        "agent_id": "analyst",
+        "owner_id": "member-2",
+        "instructions": "分析示例调查 CSV 中每种出行方式的人数和占比。返回 JSON 对象：content 为简短说明，data 为包含 mode、students、share_percent 的数组。",
+        "acceptance": "只使用提供的示例资料，清楚区分事实和建议；标注样本限制。",
+        "output_format": "json",
+        "permissions": {
+          "read": [],
+          "write": []
+        },
+        "tools": [],
+        "mock_delay_ms": 400,
+        "mock_result": {
+          "content": "Fixed MOCK result: 40 fictional students; walking 30%, cycling 25%, bus 35%, car 10%. These figures demonstrate the workflow, not real research.",
+          "data": [
+            {
+              "mode": "Walk",
+              "students": 12,
+              "share_percent": 30
+            },
+            {
+              "mode": "Bike",
+              "students": 10,
+              "share_percent": 25
+            },
+            {
+              "mode": "Bus",
+              "students": 14,
+              "share_percent": 35
+            },
+            {
+              "mode": "Car",
+              "students": 4,
+              "share_percent": 10
+            }
+          ]
+        },
+        "join_rule": "all_selected"
+      }
+    },
+    {
+      "id": "synthesis",
+      "type": "agent_task",
+      "label": "Bring the story together",
+      "position": {
+        "x": 1280,
+        "y": 240
+      },
+      "config": {
+        "agent_id": "editor",
+        "owner_id": "member-3",
+        "instructions": "合并研究任务和分析任务提供的内容，写一份校园可持续出行 Markdown 报告。必须注明示例数据、样本限制和下一步验证计划。",
+        "acceptance": "只使用提供的示例资料，清楚区分事实和建议；标注样本限制。",
+        "output_format": "markdown",
+        "permissions": {
+          "read": [],
+          "write": []
+        },
+        "tools": [],
+        "mock_delay_ms": 400,
+        "mock_result": {
+          "content": "# Campus mobility — example report\n\n> DEMO / MOCK. This report uses fictional teaching inputs and fixed example results. It is not the output of a live AI call.\n\n## Goal\nHelp a three-person team design a practical campus mobility pilot.\n\n## What the example inputs suggest\nThe fictional survey covers 40 students: 12 walk (30%), 10 bike (25%), 14 take the bus (35%), and 4 drive (10%). Example interviews highlight covered bicycle parking and clearer bus information.\n\n## Recommended pilot\n1. Test covered bicycle parking near the library for four weeks.\n2. Place a clearly labelled bus timetable at two busy entrances.\n3. Ask a new, larger sample about convenience before and after the pilot.\n\n## Ownership\nMember A reviews qualitative evidence. Member B checks the numbers. Member C reviews the final story before release.\n\n## Limitations\nAll supplied inputs are fictional examples. The fixed mock result demonstrates orchestration only; it does not establish a causal impact or a representative campus finding.\n\n## Next step\nReplace the example inputs with consented project material, configure real model names and credentials, then run in real mode and review the draft.\n",
+          "data": {
+            "approved": true,
+            "sample_size": 40,
+            "mode": "mock"
+          }
+        },
+        "join_rule": "all_selected"
+      }
+    },
+    {
+      "id": "review",
+      "type": "human_review",
+      "label": "A human makes the call",
+      "position": {
+        "x": 1620,
+        "y": 240
+      },
+      "config": {
+        "owner_id": "member-3",
+        "instructions": "请检查草稿中的示例标记、数字与建议。确认后才允许写出最终 report.md 和 summary.csv。",
+        "join_rule": "all_selected"
+      }
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "label": "Ready to share",
+      "position": {
+        "x": 1940,
+        "y": 240
+      },
+      "config": {
+        "mappings": [
+          {
+            "source_node": "synthesis",
+            "filename": "report.md",
+            "format": "markdown"
+          },
+          {
+            "source_node": "analysis",
+            "filename": "summary.csv",
+            "format": "csv"
+          }
+        ],
+        "join_rule": "all_selected"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "control-start-resources",
+      "source": "start",
+      "target": "resources",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "control-resources-parallel",
+      "source": "resources",
+      "target": "parallel",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "control-parallel-research",
+      "source": "parallel",
+      "target": "research",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "control-parallel-analysis",
+      "source": "parallel",
+      "target": "analysis",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "control-research-synthesis",
+      "source": "research",
+      "target": "synthesis",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "control-analysis-synthesis",
+      "source": "analysis",
+      "target": "synthesis",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "control-synthesis-review",
+      "source": "synthesis",
+      "target": "review",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "control-review-output",
+      "source": "review",
+      "target": "output",
+      "source_port": "out",
+      "target_port": "in",
+      "kind": "control"
+    },
+    {
+      "id": "data-resources-research",
+      "source": "resources",
+      "target": "research",
+      "source_port": "data-out",
+      "target_port": "data-in",
+      "kind": "data"
+    },
+    {
+      "id": "data-resources-analysis",
+      "source": "resources",
+      "target": "analysis",
+      "source_port": "data-out",
+      "target_port": "data-in",
+      "kind": "data"
+    },
+    {
+      "id": "data-research-synthesis",
+      "source": "research",
+      "target": "synthesis",
+      "source_port": "data-out",
+      "target_port": "data-in",
+      "kind": "data"
+    },
+    {
+      "id": "data-analysis-synthesis",
+      "source": "analysis",
+      "target": "synthesis",
+      "source_port": "data-out",
+      "target_port": "data-in",
+      "kind": "data"
+    },
+    {
+      "id": "data-synthesis-review",
+      "source": "synthesis",
+      "target": "review",
+      "source_port": "data-out",
+      "target_port": "data-in",
+      "kind": "data"
+    },
+    {
+      "id": "data-synthesis-output",
+      "source": "synthesis",
+      "target": "output",
+      "source_port": "data-out",
+      "target_port": "data-in",
+      "kind": "data"
+    },
+    {
+      "id": "data-analysis-output",
+      "source": "analysis",
+      "target": "output",
+      "source_port": "data-out",
+      "target_port": "data-in",
+      "kind": "data"
+    }
+  ],
+  "resources": [
+    {
+      "id": "interviews",
+      "name": "Example interviews",
+      "path": "inputs/example-interviews.md",
+      "description": "虚构访谈，仅用于演示，不是真实受访者材料。",
+      "example": true,
+      "content": "# EXAMPLE INPUT — fictional interview notes\n\nThis file is invented teaching material, not a real research dataset.\n\n- Student A: I would cycle more often if there were covered racks near the library.\n- Student B: I take the bus, but departure information is hard to find.\n- Student C: Walking is convenient, but the last stretch is poorly signposted.\n\nUse these statements as illustrative themes only. Do not claim representativeness.\n"
+    },
+    {
+      "id": "survey",
+      "name": "Example travel survey",
+      "path": "inputs/example-survey.csv",
+      "description": "虚构的 40 人出行方式统计，仅用于演示。",
+      "example": true,
+      "content": "mode,students\nWalk,12\nBike,10\nBus,14\nCar,4\n"
+    }
+  ],
+  "limits": {
+    "max_concurrency": 2,
+    "timeout_seconds": 90,
+    "max_retries": 1,
+    "max_tool_rounds": 4
+  },
+  "viewport": {
+    "x": 40,
+    "y": 80,
+    "zoom": 0.58
+  },
+  "design_notes": [
+    "演示模板：内容与 mock 结果固定，不是 AI 生成。",
+    "访谈整理与数据分析没有互相依赖，因此并行执行。",
+    "汇总任务等待两个分支完成，只接收明确连接的数据。",
+    "最终文件必须等待 Member C 明确审核；负责人不授予凭证或文件权限。",
+    "执行模型名称暂未配置。mock 可直接运行；real 必须分别配置模型名与环境变量。"
+  ]
+}

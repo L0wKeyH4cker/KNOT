@@ -1,0 +1,108 @@
+# 验证记录
+
+验证日期：2026-11-06（America/New_York）。此文件只记录实际执行过的验证；mock、协议测试和真实模型调用分别记录。
+
+## 环境
+
+- 工作目录：用户本地 TeamBlocks 项目。
+- Node.js：主进程已发现 24.19.0。
+- Python：已实际执行用户 Miniconda 解释器，版本 3.14.6；系统 `python.exe` 是不可执行的 WindowsApps 别名。`scripts/dev.mjs` 会自动查找有效解释器。
+- 初次交付时没有 OpenAI 或 Anthropic API 凭证；当时没有进行真实模型调用。之后的连接排障记录见下文。
+
+## 实际结果
+
+| 验证 | 实际结果 |
+| --- | --- |
+| Python 后端、执行器、导出集成测试 | 最新同次整合运行 **94 项：93 通过、1 跳过、0 失败** |
+| 前端工作流与需求材料数据测试 | **10 项全部通过** |
+| Windows 启动器 | 实际解压 ZIP，执行 `start.bat`，创建 `.venv` 和 `.env`，成功运行至人工审核，退出码 2 |
+| macOS/Linux 启动器 | Git Bash `bash -n` 语法检查通过；没有在 macOS/Linux 主机上执行 |
+| 独立示例交付 | 导出 ZIP → 新目录解压 → mock 运行 → 审核暂停 → 显式确认 → 生成 report.md 和 summary.csv |
+| 前端生产构建 | `npm run build` 已通过：TypeScript 检查与 Vite 生产构建成功 |
+| 浏览器实际交互 | Playwright + 独立 Chrome：**15 项全部通过**，19.8 秒；包含 PDF 上传、文字提取、任务确认、生成与保存、下载，以及原有画布和运行包验证 |
+| 真实模型 API | **需求分析、工作流生成通过**：`gpt-6-luna` 处理两页合成 PDF，提取 3 项任务，生成 7 节点、14 连线；尚未实际执行生成工作流的 real Agent 任务 |
+
+Python 跳过项为“创建符号链接后验证读取被阻止”：Windows 主机未授权测试进程创建符号链接。路径越界、Windows 预留文件名、大小写等价路径和最终文件保护的测试均已通过。执行器另外检查符号链接、junction/reparse 路径，但这一系统级用例尚未实跑。
+
+实际命令：
+
+```sh
+python -m unittest discover -s tests -p "test_*.py" -v
+npm run test:model
+node scripts/dev.mjs --check-python
+npm run build
+# 先在另一个终端启动 npm run dev，再运行：
+npm run test:browser
+```
+
+本机 Python 测试使用已安装的 Miniconda 解释器，没有依赖系统中失效的 WindowsApps 别名。其他环境可通过 `PYTHON` 指定自己的解释器。集成测试在项目下 `.test-tmp/` 创建独立解压目录，子进程从解压目录运行、清除继承的 `PYTHONPATH`，完成后清理自身临时目录。HTTP 测试实际监听 loopback 随机端口。
+
+浏览器测试使用独立 Chrome 会话，不依赖已登录的个人浏览器。Windows 自动查找 `C:/Program Files/Google/Chrome/Application/chrome.exe`；也可设置 `PLAYWRIGHT_CHROMIUM_EXECUTABLE`，或用 `npx playwright install chromium` 安装 Playwright Chromium。开发服务需先运行在 `127.0.0.1:5173` 和 `127.0.0.1:8000`。
+
+## 关键验收证据
+
+- **从零创建完整流程**：浏览器中填写项目、人数和目标，选择 Start from scratch，实际拖入 Start/Agent Task/Output，配置 Agent 和任务，拖端口建立执行/数据连接，检查通过后下载 JSON/ZIP。下载的手工工作流 ZIP 在新目录通过 Python 子进程实际运行，并生成 `report.md`。
+- **自由画布交互**：实际移动积木并保留依赖；撤销/重做、复制/删除、保存后刷新恢复、拖动连接端点改接、删除/新建连接、循环拦截、平移/缩放及视角恢复均通过。JSON 往返保留节点、Agent、材料和连接。
+- **浏览器显示与规划边界**：检查了小屏文档无横向溢出、导出控件可见以及页面无脚本异常。没有 key 时真实 `/api/plan` 请求明确报错；另用浏览器 API fixture 提供固定合法草案，验证后续人工编辑与撤销。后者仅验证交互，不是一次真实 AI 生成。
+- **配置保真**：ZIP 内 `workflow.json` 与传入工作流深比较相等；位置、任务要求、权限、连线和输出文件名保留。修改 mock 内容和输出映射后，实际交付内容/文件名随之改变。
+- **修改连接改变行为**：无审核的工作流能直接生成文件；在最终执行路径插入一个新的 Human Review 并重接连线后，导出包实际暂停，最终文件尚不存在。
+- **审核不可自动跳过**：批准后交付，拒绝后阻止下游；多个人工审核节点需要逐个明确批准；恢复时已经成功的任务不重跑。修改工作流后不允许套用旧审核状态。
+- **真实并发**：独立任务的开始/结束时间实际重叠；并发上限为 1 时执行串行；汇总任务等两项任务结束才开始。
+- **条件与汇合**：未选分支标记 skipped；`all_selected` 汇合继续，`all_success` 按规则跳过；无永久等待。Output 读取已跳过来源时明确失败，不生成伪造文件。
+- **显式数据**：只有执行连线时，任务不会自动拿到上游结果；需要数据连线。
+- **权限**：工具调用同时检查 Agent/任务工具授权和文件路径授权；路径越界与未经允许的文件访问被阻止。大小写变化不能绕过最终 Output 文件保护。
+- **规划模型**：没有凭证时明确拒绝；输出须通过 schema 与图校验；最多初次生成加两次修复；不能增加文件权限、工具授权或编造成员技能。此部分使用测试替身检验协议，未进行真实模型生成。
+- **模型协议**：OpenAI Chat Completions 与 Anthropic Messages 的消息、工具调用、用量和错误处理有测试；有限工具轮数、缺 key、失败不回退均通过。另有真实 HTTP 请求到本地测试服务，覆盖混合两种适配器的 real 模式工作流、各任务独立上下文，以及慢响应流的总超时。它使用本地固定响应和测试凭证，不等同于提供商线上调用。
+- **凭证边界**：明显 key/secret 字段在前端保存前被拒绝；后端拒绝工作流内的环境凭证值；自定义凭证引用对应的值会被脱敏。ZIP 只含环境变量引用与空白 `.env.example`，无开发者绝对路径。
+
+验收在本地生成了 `artifacts/teamblocks-demo.zip`、`artifacts/demo-verification.json`、`artifacts/demo-results/report.md`、`artifacts/demo-results/summary.csv` 和对应事件/状态日志。整个 `artifacts/` 目录已由 Git 忽略，不包含在仓库中；可运行下方演示验收命令重新生成。示例审核由验收过程明确模拟确认，不声称通过了人类身份认证。`python -m backend.export_example` 只重新生成 ZIP，不运行工作流、不生成成果、不自动审核。
+
+`python scripts/verify_demo.py` 是完整演示验收入口：重新打包、解压到临时目录、检查初次运行暂停且最终文件不存在，再显式调用 approve 恢复，保存报告、CSV、日志和验证摘要。成功后摘要包含所验 ZIP 的 SHA-256，便于核对包与证据一致。此脚本明确模拟审核，仅用于开发验收，不打包到普通运行包中。
+
+运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成浏览器证据：`onboarding.png`、`canvas-desktop.png`、`canvas-mobile.png`、`manual-runner.zip` 和 `template-runner.zip`。产物不提交到 Git，测试源文件为 `tests/browser/workflow.spec.ts`。
+
+## 已修复并回归验证的问题
+
+独立审查发现并修复了 Windows 大小写路径绕过最终文件保护、畸形 JSON 导致校验异常、资料与固定 README 同名覆盖、真实 JSON 结果的结构解包以及启动器对 ensurepip 的不必要依赖。启动器使用 `venv --without-pip` 创建隔离环境，固定执行器只用标准库。
+
+## 已知限制
+
+- OpenAI 的需求分析和规划已完成一次真实调用验证；Anthropic 线上调用和生成工作流的真实 Agent 执行尚未验证。模型名须按用户账户填写。
+- macOS/Linux 启动脚本通过语法检查，尚未在相应系统上运行。
+- 单机无环工作流，不支持循环、跨机器调度、多人实时协作或身份认证。
+- 支持文本/CSV 和有限本地工具，不支持任意代码、shell、网页搜索、浏览器操作或 PPT 生成。
+- 任务验收要求是模型指令与人工审核依据，不是自动质量证明；mock 使用固定示例结果。
+- 画布以浏览器本地存储保存，受浏览器存储容量影响；重要工作流应另存 JSON。
+
+## 必须明确区分
+
+- mock 模式只验证流程，不证明真实模型输出质量或 API 可用性。
+- 使用伪造 HTTP 服务的适配器测试，只能验证请求/响应处理，不能标记为真实 API 调用验证。
+- UI 成功渲染不能代替实际拖拽、连线、恢复和导出后运行的验证。
+- 规划请求缺少 key 必须明确报错；模板不是 AI 生成结果。
+
+初次版本复验使用 `npm run build` 的生产产物，由 Python `server.py` 在端口 8000 提供页面。设置 `TEAMBLOCKS_URL=http://127.0.0.1:8000` 后运行浏览器测试，10/10 通过（12.2 秒）。`scripts/verify_demo.py` 重新导出并实际执行当时的运行包；ZIP 为 21 个条目，29,930 字节，审核前 report.md 和 summary.csv 不存在，批准后两者生成。重新运行 `python scripts/verify_demo.py` 后，可在本地 `artifacts/demo-verification.json` 查看对应运行包的大小和 SHA256。
+
+## 后续 API 连接排障（2026-11-06）
+
+用户配置凭证后，使用现有 key 对 OpenAI 官方模型查询接口做了两次只读请求：`GPT-6 Luna` 返回 HTTP 404 / `model_not_found`，`gpt-6-luna` 返回 HTTP 200 且 ID 相符。确认截图使用了展示名称，应改为 API 模型 ID。没有调用生成接口、没有消耗生成 token，没有输出或修改 key。此项只验证身份及模型可访问性，不替代完整 AI 生成和 real 工作流执行验证。
+
+本次错误诊断修复新增 9 项纯测试替身用例。完整 Python 回归实际执行 60 项：59 通过、1 项符号链接系统权限跳过（14.536 秒）；前端构建通过。模型名输入增加 API ID 提示；HTTP 状态、白名单错误代码和固定中文建议可以显示在规划失败提示中，服务商原始响应内容不会回显。示例包当时已通过 verify_demo 再次独立执行；运行包及其大小、SHA256 记录属于本地验证产物，可重新运行该脚本生成。
+
+## 需求 PDF → 任务分析 → 工作流（2026-11-06）
+
+完整 Python 回归实际执行 **94 项，93 通过、1 项系统符号链接权限跳过**。新增验证覆盖真实文本 PDF 提取、页码和文档指纹、混合空白页提示、扫描件/加密/损坏/超限文件拒绝、解析超时、需求分析结构校验与修复、无凭证拒绝，以及原文传入规划模型和资源保留。`npm run test:model` 的 **10 项前端数据测试全部通过**，包括需求材料组装、保留原项目内容和无效任务拒绝；最终生产构建通过。
+
+最新生产构建由独立本地测试服务 `http://127.0.0.1:8001` 提供，未停止用户已有服务。设置 `TEAMBLOCKS_URL` 后运行全部浏览器测试，**15 项全部通过，19.8 秒**。五项新增用例位于 `tests/browser/requirements.spec.ts`：
+
+- 新项目不填写目标或交付物，直接上传真实两页 PDF；实际调用后端提取文字，再分析并编辑任务标题，生成画布后继续修改、保存、刷新。
+- 真实无文字 PDF 被后端拒绝，页面显示扫描件/OCR 说明，不调用规划模型。
+- 关闭上传弹窗后，项目、材料、节点位置和连线不变。
+- 修改提取原文会清除旧任务分析；再次分析时发出修改后的文字。
+- 生成保留原有项目名、成员和其它材料，一次 Undo 恢复原工作流。
+
+这些浏览器用例只有 `/api/requirements/analyze` 和 `/api/plan` 的模型响应使用固定测试数据；PDF 提取、校验和 ZIP 导出调用真实后端。导出的 JSON 包含需求原文和修改后的任务，ZIP 内两份材料的内容逐字一致，没有原 PDF。测试使用独立 Chrome 会话；没有访问用户个人浏览器、读取 key 或调用线上模型。
+
+另有一次独立的真实模型验证：使用用户已配置的 `gpt-6-luna`，将两页合成测试 PDF 的提取文本交给需求分析接口，得到 **3 项任务**；随后调用规划接口，得到 **7 个节点、14 条连线**，源材料完整保留。输入为虚构调查数据，未使用用户私有项目文档。详细记录仅保留在本地 `artifacts/requirements-live-check.json`，不随仓库发布。这证明本次分析和规划调用成功；`execution_run:false` 明确表示没有进一步执行真实 Agent 任务，也不能据此保证任意文档的分析质量。复验当前配置时，可在界面上传测试文档，依次点击 Analyze requirements 和 Generate workflow from requirements；这会发起真实模型调用，不属于默认测试套件。
+
+弹窗关闭、文档移除和字段锁定的小修完成后，针对最终生产构建再次运行五项需求浏览器用例，**5/5 通过，7.5 秒**。本地浏览器证据包括 `artifacts/browser/requirements-upload.png`、`requirements-review.png`、`requirements-runner.zip`，可用 `npm run test:browser` 重新生成。截图禁用了淡入动画，已检查上传入口和可编辑任务卡片显示完整。
