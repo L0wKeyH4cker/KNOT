@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlsplit
 from backend.bundle import BundleError, build_bundle, reject_secrets
 from backend.documents import DocumentError, extract_document
 from backend.connections import credential_status, save_credential, test_connection, DEEPSEEK_CONNECTION
-from backend.planner import PlanningError, plan_workflow
+from backend.planner import PlanningError, hosted_planners, plan_workflow
 from backend.template import load_template
 from runtime.validation import validate_workflow
 from runtime.security import redact
@@ -66,9 +66,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         if path == "/api/health":
-            credentials = credential_status(ROOT)
-            self.send_json(200, {"ok": True, "planner_credentials": credentials,
-                                 "default_planner": DEEPSEEK_CONNECTION if credentials.get("DEEPSEEK_API_KEY") else None})
+            hosted = hosted_planners()
+            if hosted is None:
+                credentials = credential_status(ROOT)
+                default = DEEPSEEK_CONNECTION if credentials.get("DEEPSEEK_API_KEY") else None
+            else:
+                # Public deployment: only report the allow-listed credentials and publish the pinned planner.
+                credentials = {e["credential_ref"]: bool(os.environ.get(e["credential_ref"], "").strip()) for e in hosted}
+                first = hosted[0] if hosted else None
+                default = {"provider": first.get("provider", "openai"), "model": first.get("model", ""),
+                           "credential_ref": first["credential_ref"], "base_url": first.get("base_url", "")} if first else None
+            self.send_json(200, {"ok": True, "planner_credentials": credentials, "default_planner": default})
         elif path == "/api/template":
             self.send_json(200, load_template())
         elif path.startswith("/api/"):
@@ -95,7 +103,10 @@ class Handler(BaseHTTPRequestHandler):
         if origin:
             try:
                 parsed = urlsplit(origin)
-                allowed = parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost") and parsed.port in (5173, self.server.server_port)
+                local = parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost") and parsed.port in (5173, getattr(self.server, "server_port", None))
+                # Hosted deployments (e.g. Vercel): accept only same-origin requests from the served editor.
+                same_origin = parsed.scheme == "https" and parsed.netloc == self.headers.get("Host", "")
+                allowed = local or same_origin
             except ValueError:
                 allowed = False
             if not allowed:
@@ -114,7 +125,9 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(size).decode("utf-8"))
             if not isinstance(body, dict):
                 raise ValueError("请求必须是 JSON 对象。")
-            if path == "/api/credentials":
+            if path == "/api/credentials" and hosted_planners() is not None:
+                self.send_json(403, {"error": "This hosted deployment does not accept API keys from the browser. Credentials are configured by the site owner."})
+            elif path == "/api/credentials":
                 self.send_json(200, {"credentials": save_credential(ROOT, body.get("credential_ref"), body.get("key"))})
             elif path == "/api/connection/test":
                 self.send_json(200, test_connection(body.get("connection")))

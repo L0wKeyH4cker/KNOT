@@ -6,7 +6,7 @@ import json
 import re
 
 from backend.bundle import reject_secrets
-from backend.planner import PlanningError, build_planner_agent, parse_json_response
+from backend.planner import PLANNER_TIMEOUT, PlanningError, build_planner_agent, parse_json_response
 from runtime.providers import ProviderError, complete
 
 
@@ -120,7 +120,7 @@ def analyze_requirements(document, planner, *, model_call=None):
     # Initial request plus one correction; never substitute a template or mock.
     for _attempt in range(2):
         try:
-            response = call(agent, REQUIREMENTS_GUIDE, prompt, tools=[], timeout=90, max_tool_rounds=1)
+            response = call(agent, REQUIREMENTS_GUIDE, prompt, tools=[], timeout=PLANNER_TIMEOUT, max_tool_rounds=1)
         except ProviderError as exc:
             raise PlanningError(f"真实需求分析失败：{exc.user_message()} 没有退回 mock。", status=502) from exc
         except Exception as exc:
