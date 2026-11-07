@@ -310,6 +310,10 @@ def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = N
             raise TimeoutError("Task model/tool deadline exceeded")
         if provider == "openai":
             payload = {"model": model, "messages": messages}
+            if agent.get("thinking") == "disabled" and parsed.hostname == "api.deepseek.com":
+                # Structured planning output does not need DeepSeek's slow thinking mode.
+                # https://api-docs.deepseek.com/guides/thinking_mode/
+                payload["thinking"] = {"type": "disabled"}
             if tools:
                 payload["tools"] = [{"type": "function", "function": item} for item in tools]
             response = _post(base + "/chat/completions", {"Authorization": "Bearer " + credential}, payload, remaining)

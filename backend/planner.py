@@ -5,6 +5,7 @@ from copy import deepcopy
 import json
 import os
 import re
+from urllib.parse import urlsplit
 
 from backend.bundle import ENV_NAME, reject_secrets, resource_archive_path
 from runtime.providers import ProviderError, complete
@@ -135,10 +136,39 @@ def capability_errors(workflow, project, resources):
     return errors
 
 
+# Large requirement sets can take minutes; stays below Vercel's 300 s function limit.
+PLANNER_TIMEOUT = 240
+
+
+def hosted_planners():
+    """Server-side allow-list for public deployments (env KNOT_HOSTED_PLANNERS, JSON list).
+
+    Each entry: {"credential_ref", "provider", "base_url", "model"}. When set, browsers may only use these
+    credential references and the endpoint is pinned server-side, so a visitor can never point a server
+    secret at an arbitrary URL or read other environment variables.
+    """
+    raw = os.environ.get("KNOT_HOSTED_PLANNERS", "").strip()
+    if not raw:
+        return None
+    try:
+        entries = json.loads(raw)
+    except ValueError:
+        return []
+    return [e for e in entries if isinstance(e, dict) and ENV_NAME.fullmatch(str(e.get("credential_ref", "")))]
+
+
 def build_planner_agent(planner):
     """Validate one shared planning configuration without exposing its secret."""
     if not isinstance(planner, dict):
         raise PlanningError("请配置规划模型。")
+    hosted = hosted_planners()
+    if hosted is not None:
+        entry = next((e for e in hosted if e["credential_ref"] == planner.get("credential_ref")), None)
+        if entry is None:
+            raise PlanningError("This hosted deployment only allows its configured planner credentials: "
+                                + ", ".join(e["credential_ref"] for e in hosted), status=403)
+        planner = {**planner, "provider": entry.get("provider", "openai"), "base_url": entry.get("base_url", ""),
+                   "model": entry.get("model") or (planner.get("model") or "").strip()}
     provider = planner.get("provider")
     if provider not in ("openai", "anthropic"):
         raise PlanningError("规划模型提供商仅支持 OpenAI-compatible 或 Anthropic。")
@@ -154,6 +184,12 @@ def build_planner_agent(planner):
     agent = {"id": "planner", "name": "Workflow planner", "provider": provider, "model": model.strip(), "credential_ref": ref, "tools": []}
     if planner.get("base_url"):
         agent["base_url"] = planner["base_url"]
+        try:
+            host = urlsplit(str(planner["base_url"])).hostname
+        except ValueError:
+            host = None  # Malformed URLs are rejected later with a clear message.
+        if host == "api.deepseek.com":
+            agent["thinking"] = "disabled"
     return agent
 
 
@@ -177,7 +213,7 @@ def plan_workflow(project, resources, planner, *, model_call=None):
     # Initial request plus at most two bounded correction attempts.
     for attempt in range(3):
         try:
-            response = call(agent, SCHEMA_GUIDE, prompt, tools=[], timeout=90, max_tool_rounds=1)
+            response = call(agent, SCHEMA_GUIDE, prompt, tools=[], timeout=PLANNER_TIMEOUT, max_tool_rounds=1)
         except ProviderError as exc:
             # user_message uses only fixed messages, HTTP status and allowlisted codes.
             # Never forward a provider's free-form message or HTTP response body.

@@ -50,3 +50,6 @@ Desktop.ini
 *.swp
 *.swo
 *.bak
+
+# Vercel CLI project link
+.vercel

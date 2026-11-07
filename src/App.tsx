@@ -77,6 +77,7 @@ import {
   download,
 } from './model';
 import type { Workflow, Block, NodeKind, Link, Issue } from './model';
+import { cloudConfigured, cloudDelete, cloudList, cloudSave } from './cloud';
 const nodeTypes = { block: BlockNode };
 const GuidedTour = lazy(() => import('./GuidedTour'));
 const QuickGuide = lazy(() => import('./QuickGuide'));
@@ -450,10 +451,20 @@ export default function App() {
       if (!projectTab) localStorage.setItem(STORAGE, JSON.stringify(current.current));
       lastPersisted.current = current.current;
       setSavedProjects(next);
-      notify('Project saved. Open it anytime from your project library.');
     } catch (e) {
       notify('Could not save: ' + (e as Error).message);
+      return;
     }
+    if (!cloudConfigured) {
+      notify('Project saved on this device. Open it anytime from your project library.');
+      return;
+    }
+    notify('Saved on this device · syncing to cloud…');
+    cloudSave(structuredClone(current.current))
+      .then(() => notify('Project saved on this device and in the cloud library.'))
+      .catch((e) =>
+        notify('Saved on this device only. Cloud sync failed: ' + (e as Error).message),
+      );
   }, [notify, archiveTourProjects]);
   const resetDeletedProject = useCallback(() => {
     setWf(emptyWorkflow());
@@ -829,8 +840,26 @@ export default function App() {
     }
   };
   const openLibrary = () => {
-    setSavedProjects(readProjects());
+    const local = readProjects();
+    setSavedProjects(local);
     setModal('saved');
+    if (cloudConfigured)
+      cloudList()
+        .then((rows) => {
+          const cloud: Workflow[] = [];
+          for (const r of rows) {
+            try {
+              const w = parseWorkflow(r);
+              // A project deleted on this device stays deleted even if its cloud copy lingers.
+              if (!isProjectDeleted(localStorage, w.project.id)) cloud.push(w);
+            } catch {
+              /* skip rows that no longer parse */
+            }
+          }
+          const ids = new Set(cloud.map((w) => w.project.id));
+          setSavedProjects([...cloud, ...local.filter((w) => !ids.has(w.project.id))]);
+        })
+        .catch((e) => notify('Cloud library unavailable: ' + (e as Error).message));
   };
   const projects = [
     ...(hasProject(wf) ? [wf] : []),
@@ -874,6 +903,10 @@ export default function App() {
       setHistoryTick((value) => value + 1);
       if (current.current.project.id === project.project.id) resetDeletedProject();
       notify('Project deleted.');
+      if (cloudConfigured)
+        cloudDelete(project.project.id).catch((e) =>
+          notify('Deleted on this device. Cloud copy not removed: ' + (e as Error).message),
+        );
       return true;
     } catch {
       return false;
