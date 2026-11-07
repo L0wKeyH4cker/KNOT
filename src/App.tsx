@@ -49,6 +49,19 @@ import Inspector, { Field } from './Inspector';
 import { AgentsSettings, ProjectSettings } from './Settings';
 import RequirementIntake from './RequirementIntake';
 import { KNOT_STORAGE, KNOT_LIBRARY, migrateLegacyStorage } from './storage';
+import {
+  PROJECT_QUERY,
+  PROJECT_DRAFT_PREFIX,
+  PROJECT_DELETED_PREFIX,
+  deleteLibraryProject,
+  findProject,
+  isProjectDeleted,
+  prepareProjectForTab,
+  projectHref,
+  readProjectLibrary,
+  saveLibraryProject,
+  writeCurrentProject,
+} from './project-storage';
 import type { Planner } from './Settings';
 import {
   KINDS,
@@ -66,6 +79,9 @@ import type { Workflow, Block, NodeKind, Link, Issue } from './model';
 const nodeTypes = { block: BlockNode };
 const GuidedTour = lazy(() => import('./GuidedTour'));
 const QuickGuide = lazy(() => import('./QuickGuide'));
+const ProjectLibrary = lazy(() => import('./ProjectLibrary'));
+const requestedProjectId = new URLSearchParams(window.location.search).get(PROJECT_QUERY);
+const projectTab = requestedProjectId !== null;
 const STORAGE = KNOT_STORAGE,
   LIBRARY = KNOT_LIBRARY,
   PLANNER = 'knot.planner.v1';
@@ -98,8 +114,9 @@ function readPlanner(): Planner | null {
 function restore() {
   try {
     migrateLegacyStorage(localStorage);
+    if (requestedProjectId !== null) return findProject(localStorage, requestedProjectId);
     const raw = localStorage.getItem(STORAGE);
-    return raw ? parseWorkflow(JSON.parse(raw)) : null;
+    return raw ? findProject(localStorage, parseWorkflow(JSON.parse(raw)).project.id) : null;
   } catch {
     return null;
   }
@@ -117,7 +134,7 @@ const secondaryPages = new Set([
 ]);
 function readProjects(): Workflow[] {
   try {
-    return (JSON.parse(localStorage.getItem(LIBRARY) || '[]') as unknown[]).map(parseWorkflow);
+    return readProjectLibrary(localStorage);
   } catch {
     return [];
   }
@@ -221,12 +238,19 @@ export default function App() {
     fileInput = useRef<HTMLInputElement>(null),
     toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     flow = useReactFlow();
+  const lastPersisted = useRef<Workflow | null>(restored);
   current.current = wf;
   const notify = useCallback((message: string) => {
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 6500);
   }, []);
+  useEffect(() => {
+    if (projectTab && !restored) {
+      notify('This project is no longer available. Choose another project from your library.');
+      navigate('saved', { replace: true });
+    }
+  }, [notify, navigate]);
   const dismissWelcome = () => {
     templateRequest.current += 1;
     setBusy((value) => (value === 'template' ? '' : value));
@@ -237,11 +261,18 @@ export default function App() {
     if (!pendingTourProjects.current.length) return;
     const stored: unknown = JSON.parse(localStorage.getItem(LIBRARY) || '[]');
     if (!Array.isArray(stored)) throw new Error('Invalid project library');
-    const previous = pendingTourProjects.current;
+    const previous = pendingTourProjects.current.filter(
+      (project) => !isProjectDeleted(localStorage, project.project.id),
+    );
     const ids = new Set(previous.map((project) => project.project.id));
     const next = [
       ...previous,
-      ...stored.map(parseWorkflow).filter((project) => !ids.has(project.project.id)),
+      ...stored
+        .map(parseWorkflow)
+        .filter(
+          (project) =>
+            !ids.has(project.project.id) && !isProjectDeleted(localStorage, project.project.id),
+        ),
     ];
     localStorage.setItem(LIBRARY, JSON.stringify(next));
     pendingTourProjects.current = [];
@@ -274,7 +305,13 @@ export default function App() {
     (status: OnboardingStatus) => {
       const snapshot = tourSnapshot.current;
       if (snapshot) {
-        setWf(snapshot.workflow);
+        let previous = snapshot.workflow;
+        try {
+          if (isProjectDeleted(localStorage, previous.project.id)) previous = emptyWorkflow();
+        } catch {
+          /* Keep the in-memory project usable when browser storage is unavailable. */
+        }
+        setWf(previous);
         setSearch(snapshot.search);
         setShowData(snapshot.showData);
         tourSnapshot.current = null;
@@ -338,7 +375,23 @@ export default function App() {
       try {
         assertSafeWorkflow(wf);
         archiveTourProjects();
-        localStorage.setItem(STORAGE, JSON.stringify(wf));
+        writeCurrentProject(localStorage, wf, !projectTab);
+        lastPersisted.current = wf;
+        if (
+          projectTab &&
+          new URLSearchParams(window.location.search).get(PROJECT_QUERY) !== wf.project.id
+        ) {
+          window.history.replaceState(
+            null,
+            '',
+            projectHref(
+              window.location.pathname,
+              window.location.search,
+              wf.project.id,
+              window.location.hash,
+            ),
+          );
+        }
         setSavedStatus('Saved on this device');
       } catch {
         setSavedStatus('Not saved · storage unavailable');
@@ -380,19 +433,51 @@ export default function App() {
     try {
       assertSafeWorkflow(current.current);
       archiveTourProjects();
-      const raw = JSON.parse(localStorage.getItem(LIBRARY) || '[]') as Workflow[];
-      const next = [
-        current.current,
-        ...raw.filter((x) => x.project.id !== current.current.project.id),
-      ].slice(0, 20);
-      localStorage.setItem(LIBRARY, JSON.stringify(next));
-      localStorage.setItem(STORAGE, JSON.stringify(current.current));
+      const next = saveLibraryProject(localStorage, current.current);
+      if (!projectTab) localStorage.setItem(STORAGE, JSON.stringify(current.current));
+      lastPersisted.current = current.current;
       setSavedProjects(next);
       notify('Project saved. Open it anytime from your project library.');
     } catch (e) {
       notify('Could not save: ' + (e as Error).message);
     }
   }, [notify, archiveTourProjects]);
+  const resetDeletedProject = useCallback(() => {
+    setWf(emptyWorkflow());
+    setSelected(null);
+    setEdgeSelected(null);
+    past.current = [];
+    future.current = [];
+    setHistoryTick((value) => value + 1);
+    navigate('saved', { replace: true });
+  }, [navigate]);
+  useEffect(() => {
+    const syncLibrary = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage) return;
+      if (
+        event.key === LIBRARY ||
+        event.key === null ||
+        event.key?.startsWith(PROJECT_DRAFT_PREFIX) ||
+        event.key?.startsWith(PROJECT_DELETED_PREFIX)
+      )
+        setSavedProjects(readProjects());
+      if (!event.key?.startsWith(PROJECT_DELETED_PREFIX) || event.newValue === null) return;
+      const id = decodeURIComponent(event.key.slice(PROJECT_DELETED_PREFIX.length));
+      past.current = past.current.filter((project) => project.project.id !== id);
+      future.current = future.current.filter((project) => project.project.id !== id);
+      pendingTourProjects.current = pendingTourProjects.current.filter(
+        (project) => project.project.id !== id,
+      );
+      setHistoryTick((value) => value + 1);
+      if (current.current.project.id === id) {
+        if (tourSnapshot.current) endTour('skipped');
+        else resetDeletedProject();
+        notify('This project was deleted in another tab.');
+      }
+    };
+    window.addEventListener('storage', syncLibrary);
+    return () => window.removeEventListener('storage', syncLibrary);
+  }, [notify, endTour, resetDeletedProject]);
   const duplicate = useCallback(() => {
     const n = current.current.nodes.find((n) => n.id === selected);
     if (n) {
@@ -571,10 +656,10 @@ export default function App() {
     try {
       const value = parseWorkflow(await api<Workflow>('template'));
       if (!isCurrentRequest()) return;
+      value.project.id = uid('example');
       if (guided) {
         // Keep the visitor's actual project and history untouched throughout the demo.
         tourSnapshot.current = { workflow: structuredClone(current.current), search, showData };
-        value.project.id = uid('example');
         setWf(value);
         setSearch('');
         setShowData(true);
@@ -718,6 +803,7 @@ export default function App() {
     try {
       if (file.size > 5_000_000) throw Error('Workflow must be smaller than 5 MB.');
       const next = parseWorkflow(JSON.parse(await file.text()));
+      if (isProjectDeleted(localStorage, next.project.id)) next.project.id = uid('project');
       change(next);
       setSelected(null);
       navigate('canvas');
@@ -738,11 +824,47 @@ export default function App() {
     ...savedProjects.filter((project) => project.project.id !== wf.project.id),
   ];
   const openProject = (project: Workflow) => {
+    if (isProjectDeleted(localStorage, project.project.id)) {
+      openLibrary();
+      notify('This project was deleted. Choose another project from your library.');
+      return;
+    }
     change(project);
     setSelected(null);
     setEdgeSelected(null);
     navigate('canvas');
     requestAnimationFrame(() => flow.setViewport(project.viewport, { duration: 250 }));
+  };
+  const prepareProjectTab = (project: Workflow) => {
+    try {
+      archiveTourProjects();
+      const hasLocalChanges =
+        project.project.id === current.current.project.id &&
+        JSON.stringify(current.current) !== JSON.stringify(lastPersisted.current);
+      setSavedProjects(prepareProjectForTab(localStorage, project, hasLocalChanges));
+      return true;
+    } catch {
+      notify('Could not open this project. Please try again.');
+      return false;
+    }
+  };
+  const deleteProject = (project: Workflow) => {
+    try {
+      setSavedProjects(deleteLibraryProject(localStorage, project.project.id));
+      pendingTourProjects.current = pendingTourProjects.current.filter(
+        (pending) => pending.project.id !== project.project.id,
+      );
+      past.current = past.current.filter((previous) => previous.project.id !== project.project.id);
+      future.current = future.current.filter(
+        (previous) => previous.project.id !== project.project.id,
+      );
+      setHistoryTick((value) => value + 1);
+      if (current.current.project.id === project.project.id) resetDeletedProject();
+      notify('Project deleted.');
+      return true;
+    } catch {
+      return false;
+    }
   };
   const startProject = (idea: string) => {
     if (firstVisit) dismissWelcome();
@@ -1517,48 +1639,15 @@ export default function App() {
                 </div>
               )}
               {modal === 'saved' && (
-                <div className="saved-content">
-                  <button
-                    className="secondary"
-                    onClick={() => {
-                      startProject('');
-                    }}
-                  >
-                    <Plus size={17} />
-                    Create a new project
-                  </button>
-                  {projects.length ? (
-                    projects.map((p) => (
-                      <button
-                        className="saved-project"
-                        key={p.project.id}
-                        onClick={() => {
-                          openProject(p);
-                        }}
-                      >
-                        <span className="project-folder">
-                          <FolderOpen size={24} />
-                        </span>
-                        <span>
-                          <strong>{p.project.name}</strong>
-                          <small>
-                            {p.project.members.length} members · {p.nodes.length} blocks
-                          </small>
-                        </span>
-                        <ArrowUpRight size={18} />
-                      </button>
-                    ))
-                  ) : (
-                    <p className="empty-text">
-                      Your canvas autosaves on this device. Use Save to add a named project to this
-                      library.
-                    </p>
-                  )}
-                  <button className="text-button" onClick={() => fileInput.current?.click()}>
-                    <Upload size={16} />
-                    Import a workflow JSON
-                  </button>
-                </div>
+                <Suspense fallback={<p className="muted">Loading your projects…</p>}>
+                  <ProjectLibrary
+                    projects={projects}
+                    onCreate={() => startProject('')}
+                    onImport={() => fileInput.current?.click()}
+                    onPrepareOpen={prepareProjectTab}
+                    onDelete={deleteProject}
+                  />
+                </Suspense>
               )}
               {modal === 'help' && (
                 <Suspense fallback={<p className="muted">Loading the visual guide…</p>}>

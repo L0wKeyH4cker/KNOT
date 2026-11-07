@@ -214,11 +214,19 @@ for (const prefix of ['knot', 'teamblocks']) {
     await page.getByRole('button', { name: 'Back', exact: true }).click();
     await page.getByRole('button', { name: 'Home', exact: true }).click();
     await page.getByRole('button', { name: 'My projects', exact: true }).click();
-    await page.getByRole('button', { name: /Saved library project/ }).click();
-    await expect(page.getByText('Preserved library task', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await page.reload();
-    expect((await getWorkflow(page)).nodes).toEqual(library.nodes);
+    const opened = page.waitForEvent('popup');
+    await page
+      .getByRole('link', { name: 'Open Saved library project in a new tab', exact: true })
+      .click();
+    const projectTab = await opened;
+    await expect(page).toHaveURL(/#\/projects$/);
+    await expect(projectTab.getByText('Preserved library task', { exact: true })).toBeVisible();
+    await projectTab.getByRole('button', { name: 'Save', exact: true }).click();
+    await projectTab.reload();
+    expect((await getWorkflow(projectTab)).nodes).toEqual(library.nodes);
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('knot.current.v1')!).project.id),
+    ).toBe(current.project.id);
     expect(
       await page.evaluate(() => JSON.parse(localStorage.getItem('knot.planner.v1') || 'null')),
     ).toEqual(planner);
@@ -503,9 +511,15 @@ test('a cancelled generation cannot replace another project or unlock its pendin
   await arrived[0];
   await page.goBack();
   await expect(page).toHaveURL(/#\/workspace$/);
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await page.getByRole('button', { name: 'My projects', exact: true }).click();
-  await page.getByRole('button', { name: /Other saved project/ }).click();
+  const importProject = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import JSON', exact: true }).click();
+  await (
+    await importProject
+  ).setFiles({
+    name: 'other-project.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(other)),
+  });
   expect((await getWorkflow(page)).project).toEqual(other.project);
   await page.getByRole('button', { name: 'AI designer', exact: true }).click();
   await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
