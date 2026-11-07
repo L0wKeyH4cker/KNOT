@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { Workflow } from './model';
 import { useEffect, useRef } from 'react';
+import BrandLogo from './BrandLogo';
 
 type Props = {
   projects: Workflow[];
@@ -50,10 +51,7 @@ export default function Home({
     <div className="home-page" data-testid="home-page">
       <header className="home-header">
         <a className="home-brand" href="#" aria-label="KNOT home">
-          <span className="home-brand-mark">
-            <Blocks size={21} />
-          </span>
-          KNOT
+          <BrandLogo decorative />
         </a>
         <button className="home-projects" onClick={onProjects}>
           <FolderOpen size={16} />
@@ -63,11 +61,17 @@ export default function Home({
 
       <main className="home-main">
         <div className="home-intro">
-          <div className="home-symbol" aria-hidden="true">
-            <span className="symbol-tile tile-one" />
-            <span className="symbol-tile tile-two" />
-            <span className="symbol-tile tile-three" />
-            <span className="symbol-tile tile-four" />
+          <div className="home-symbol">
+            <object
+              className="home-motion-logo"
+              data="/brand/KNOT-motion.svg"
+              type="image/svg+xml"
+              width="458"
+              height="128"
+              aria-label="KNOT interactive logo"
+            >
+              <BrandLogo />
+            </object>
           </div>
           <h1>
             Your idea. <span>A team in motion.</span>

@@ -41,6 +41,7 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 import Home from './Home';
+import BrandLogo from './BrandLogo';
 import { TOUR_STEPS, readOnboardingStatus, rememberOnboarding } from './onboarding';
 import type { OnboardingStatus } from './onboarding';
 import { usePage } from './navigation';
@@ -947,8 +948,13 @@ export default function App() {
       {page !== 'home' && page !== 'new' && (
         <div className="editor-layout" inert={!!modal || tourStep !== null}>
           <nav className="rail" aria-label="Main navigation">
-            <button className="brand-mark" title="KNOT home" onClick={() => navigate('home')}>
-              <Blocks size={24} />
+            <button
+              className="brand-mark"
+              title="KNOT home"
+              aria-label="KNOT home"
+              onClick={() => navigate('home')}
+            >
+              <BrandLogo mark decorative />
             </button>
             <div className="rail-middle">
               <button
@@ -987,7 +993,7 @@ export default function App() {
                 <button className="workspace-home" onClick={() => navigate('home')}>
                   <ArrowLeft size={15} /> Home
                 </button>
-                KNOT
+                <BrandLogo />
               </div>
               <div className="header-right">
                 <span className={`backend-status ${online ? 'online' : ''}`}>
@@ -1329,7 +1335,7 @@ export default function App() {
                 <ArrowLeft size={16} /> Home
               </button>
               <span className="home-brand">
-                <Blocks size={20} /> KNOT
+                <BrandLogo />
               </span>
             </div>
             <div className="onboarding-form">
@@ -1511,7 +1517,7 @@ export default function App() {
           >
             <div className="modal-head">
               <div>
-                <span className="eyebrow">KNOT STUDIO</span>
+                <BrandLogo className="modal-brand" />
                 <h2>
                   {
                     {

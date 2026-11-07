@@ -1,5 +1,7 @@
 # KNOT
 
+<img src="public/brand/KNOT-logo.png" alt="KNOT" width="220" />
+
 在自由画布上设计小组 AI 工作流，下载包含固定 Python 执行器的 ZIP，在自己的电脑上运行。任务、Agent、人类负责人分别配置；画布的节点和连线就是运行包使用的工作流。
 
 升级到 KNOT 后，浏览器内旧版保存的项目和项目库会自动迁移，已有的新存档不会被覆盖。

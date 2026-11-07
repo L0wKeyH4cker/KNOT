@@ -84,24 +84,33 @@ select:focus {
 
 .home-brand {
   display: inline-flex;
-  gap: 10px;
   align-items: center;
-  color: #282a38;
-  font-family: Manrope, sans-serif;
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.65px;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
-.home-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: #2946ad;
-  color: #fff;
+.brand-logo {
+  display: block;
+  height: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brand-logo-lockup {
+  width: 140px;
+}
+
+.brand-logo-mark {
+  width: 38px;
+}
+
+.brand-word .brand-logo {
+  width: 112px;
+}
+
+.modal-brand {
+  width: 100px;
+  margin-bottom: 6px;
 }
 
 .home-projects {
@@ -133,43 +142,17 @@ select:focus {
 }
 
 .home-symbol {
-  width: 64px;
-  height: 64px;
-  position: relative;
+  width: 256px;
+  max-width: 100%;
   margin: 0 auto 24px;
-  transform: rotate(-8deg);
 }
 
-.symbol-tile {
-  position: absolute;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-}
-
-.tile-one {
-  top: 3px;
-  left: 3px;
-  background: #2946ad;
-}
-
-.tile-two {
-  top: 3px;
-  right: 3px;
-  background: #a7b5ec;
-}
-
-.tile-three {
-  bottom: 3px;
-  left: 3px;
-  background: #d4dcfa;
-}
-
-.tile-four {
-  right: 0;
-  bottom: 0;
-  background: #5b74d0;
-  transform: rotate(12deg) translate(3px, 3px);
+.home-motion-logo,
+.home-motion-logo .brand-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 458 / 128;
 }
 
 .home-intro h1 {
@@ -431,8 +414,11 @@ select:focus {
 }
 
 .brand-mark {
-  background: #2946ad;
-  color: #fff;
+  background: transparent;
+}
+
+.brand-mark:hover {
+  background: #f1f3fb;
 }
 
 .rail-button.active {
@@ -826,8 +812,8 @@ select:focus {
     padding: 20px;
   }
 
-  .home-brand {
-    font-size: 16px;
+  .home-brand .brand-logo {
+    width: 120px;
   }
 
   .home-projects {
@@ -846,8 +832,8 @@ select:focus {
   }
 
   .home-symbol {
+    width: 220px;
     margin-bottom: 28px;
-    transform: rotate(-8deg) scale(0.85);
   }
 
   .home-intro h1 {
