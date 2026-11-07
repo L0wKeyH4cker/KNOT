@@ -189,6 +189,19 @@ export default function App() {
   );
   const templateRequest = useRef(0);
   const validationRequest = useRef(0);
+  // React Flow needs measured sizes on every controlled-node update. Keep this
+  // rendering state separate from the workflow, its exports and undo history.
+  const nodeMeasurements = useRef({
+    projectId: wf.project.id,
+    sizes: new Map<string, { width: number; height: number }>(),
+  });
+  if (nodeMeasurements.current.projectId !== wf.project.id) {
+    nodeMeasurements.current = { projectId: wf.project.id, sizes: new Map() };
+  }
+  const nodeIds = new Set(wf.nodes.map((node) => node.id));
+  for (const id of nodeMeasurements.current.sizes.keys()) {
+    if (!nodeIds.has(id)) nodeMeasurements.current.sizes.delete(id);
+  }
   const planningRequest = useRef(0);
   const activePage = useRef(page);
   activePage.current = page;
@@ -483,6 +496,13 @@ export default function App() {
     );
   };
   const onNodesChange = (changes: NodeChange[]) => {
+    for (const update of changes) {
+      if (update.type !== 'dimensions' || !update.dimensions || !nodeIds.has(update.id)) continue;
+      const { width, height } = update.dimensions;
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        nodeMeasurements.current.sizes.set(update.id, { width, height });
+      }
+    }
     if (!changes.some((c) => c.type === 'position')) return;
     const moved = applyNodeChanges(
       changes,
@@ -702,6 +722,7 @@ export default function App() {
     id: n.id,
     type: 'block',
     position: n.position,
+    measured: nodeMeasurements.current.sizes.get(n.id),
     data: { block: n, workflow: wf },
     selected: n.id === selected,
   }));
