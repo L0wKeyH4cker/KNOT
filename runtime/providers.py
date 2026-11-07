@@ -36,20 +36,20 @@ SAFE_ERROR_TYPES = {
     "api_error", "overloaded_error",
 }
 PUBLIC_ERROR_MESSAGES = {
-    "quota": "API 额度不足，或已达到消费上限。请检查该 API 项目的余额与使用限额；稍后重试通常不能解决。",
-    "rate_limit": "请求频率或 token 速率超过限制。请稍后重试，或降低并发数量。",
-    "authentication": "API 认证失败。请检查本地 key 是否有效，以及它是否属于当前服务商。",
-    "permission": "API 拒绝访问。请检查 key 所属项目、权限范围及模型访问权限。",
-    "model": "找不到模型或接口，或当前项目无权访问。请填写服务商提供的 API 模型 ID（不是显示名称），并核对 Base URL。",
-    "invalid_request": "API 不接受当前请求参数。请核对模型 ID、接口兼容性与 Base URL。",
-    "server": "模型服务暂时不可用。请稍后重试。",
-    "dns": "无法解析模型服务域名，请检查网络、DNS 和 Base URL。请求尚未收到模型服务响应。",
-    "tls": "模型服务的 TLS 证书校验失败。请检查本机证书或网络代理，不要关闭证书校验。",
-    "timeout": "模型服务连接或响应超时。请检查网络后重试。",
-    "network": "无法连接模型服务，请检查网络、代理、防火墙与 Base URL。尚不能判断 key 或模型是否有效。",
-    "unknown_rate_limit": "API 返回 429，但没有可识别的错误代码。可能是额度不足或频率限制，请检查服务商控制台。",
-    "http": "模型服务拒绝了请求。请根据 HTTP 状态检查服务商配置。",
-    "response": "模型调用未完成或响应格式无法使用。请检查模型与接口兼容性。",
+    "quota": "API quota is exhausted or the spending limit has been reached. Check the balance and usage limits for your API project. Waiting and retrying will usually not fix this.",
+    "rate_limit": "The request rate or token rate limit was exceeded. Try again later or reduce concurrency.",
+    "authentication": "API authentication failed. Check that the local key is valid and belongs to the selected provider.",
+    "permission": "The API denied access. Check the key's project, permissions, and access to the selected model.",
+    "model": "The model or endpoint was not found, or this project cannot access it. Enter the provider's API model ID, rather than its display name, and check the base URL.",
+    "invalid_request": "The API rejected the request parameters. Check the model ID, API compatibility, and base URL.",
+    "server": "The model service is temporarily unavailable. Try again later.",
+    "dns": "The model service hostname could not be resolved. Check your network, DNS, and base URL. No response was received from the model service.",
+    "tls": "TLS certificate verification failed. Check your system certificates or network proxy; keep certificate verification enabled.",
+    "timeout": "The model service connection or response timed out. Check your network and try again.",
+    "network": "Could not connect to the model service. Check your network, proxy, firewall, and base URL. The key and model have not been verified.",
+    "unknown_rate_limit": "The API returned HTTP 429 without a recognized error code. Check the provider console for quota or rate limits.",
+    "http": "The model service rejected the request. Check the HTTP status and provider configuration.",
+    "response": "The model call did not complete or returned an unusable response. Check model and API compatibility.",
 }
 
 
@@ -92,7 +92,7 @@ class ProviderError(RuntimeError):
             markers.append(self.error_code)
         elif self.error_type:
             markers.append(self.error_type)
-        prefix = "（" + " / ".join(markers) + "）" if markers else ""
+        prefix = "(" + " / ".join(markers) + ") " if markers else ""
         return prefix + PUBLIC_ERROR_MESSAGES[self.category]
 
 

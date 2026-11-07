@@ -113,7 +113,7 @@ class ConnectionTests(unittest.TestCase):
             with self.assertRaises(PlanningError) as result:
                 test_connection(DEEPSEEK_CONNECTION)
         self.assertIn("402", str(result.exception))
-        self.assertIn("额度不足", str(result.exception))
+        self.assertIn("quota", str(result.exception))
         self.assertNotIn(self.secret, str(result.exception))
 
     def test_status_contains_only_booleans_and_includes_deepseek(self):

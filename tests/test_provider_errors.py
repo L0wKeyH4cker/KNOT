@@ -34,8 +34,8 @@ class ProviderDiagnosticTests(unittest.TestCase):
         rate = self.http_failure(429, {"error": {"code": "rate_limit_exceeded"}})
         self.assertEqual(quota.category, "quota")
         self.assertEqual(rate.category, "rate_limit")
-        self.assertIn("额度", quota.user_message())
-        self.assertIn("频率", rate.user_message())
+        self.assertIn("quota", quota.user_message())
+        self.assertIn("rate", rate.user_message())
         self.assertIn("HTTP 429", quota.user_message())
         self.assertNotIn("PRIVATE BODY", str(quota) + quota.user_message())
 
@@ -47,7 +47,7 @@ class ProviderDiagnosticTests(unittest.TestCase):
                 self.assertEqual(error.error_code, code)
                 self.assertEqual(error.category, category)
                 self.assertIn(f"HTTP {status}", error.user_message())
-        self.assertIn("API 模型 ID", self.http_failure(404, {}).user_message())
+        self.assertIn("API model ID", self.http_failure(404, {}).user_message())
 
     def test_anthropic_error_type_is_allowlisted(self):
         error = self.http_failure(429, {"type": "error", "error": {"type": "rate_limit_error", "message": "private"}})
@@ -93,7 +93,7 @@ class ProviderDiagnosticTests(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn("HTTP 404", message)
         self.assertIn("model_not_found", message)
-        self.assertIn("API 模型 ID", message)
+        self.assertIn("API model ID", message)
         self.assertIn("没有退回 mock", message)
         self.assertNotIn("untrusted private", message)
         self.assertEqual(call.call_count, 1)

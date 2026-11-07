@@ -3,8 +3,8 @@
   "project": {
     "id": "campus-mobility-demo",
     "name": "Campus, reimagined",
-    "goal": "为三人小组制定校园可持续出行建议。分析示例访谈和出行调查，合并证据，由成员审核后交付简明报告与统计表。",
-    "deliverable": "一份附有样本限制和行动建议的 report.md，以及出行比例 summary.csv。",
+    "goal": "Develop sustainable campus travel recommendations for a three-person team. Analyze the example interviews and travel survey, combine the evidence, and deliver a concise report and data table after a team member reviews the draft.",
+    "deliverable": "A report.md documenting sample limitations and practical recommendations, plus a summary.csv with travel-mode percentages.",
     "members": [
       {
         "id": "member-1",
@@ -27,8 +27,8 @@
     {
       "id": "researcher",
       "name": "Research partner",
-      "role": "研究与证据整理",
-      "system_prompt": "你是团队的资料研究员。只依据显式提供的输入资料提炼观点，不声称开展过真实访谈，不编造来源。输出简明的 Markdown 发现与限制。",
+      "role": "Research and evidence synthesis",
+      "system_prompt": "You are the team's research partner. Derive findings only from the explicitly supplied materials. Do not claim to have conducted real interviews or invent sources. Return concise Markdown findings and limitations.",
       "provider": "openai",
       "model": "",
       "credential_ref": "OPENAI_API_KEY",
@@ -37,8 +37,8 @@
     {
       "id": "analyst",
       "name": "Data partner",
-      "role": "数据分析",
-      "system_prompt": "你是团队的数据分析员。分析显式提供的出行调查 CSV。返回 JSON 对象，包含 content 简述与 data 数组；data 每行有 mode, students, share_percent。明确所有数据都是演示样本。",
+      "role": "Data analysis",
+      "system_prompt": "You are the team's data analyst. Analyze only the supplied travel-survey CSV. Return a JSON object with a brief explanation in content and a data array of rows containing mode, students, and share_percent. State explicitly that all inputs are fictional demonstration data.",
       "provider": "anthropic",
       "model": "",
       "credential_ref": "ANTHROPIC_API_KEY",
@@ -47,8 +47,8 @@
     {
       "id": "editor",
       "name": "Story partner",
-      "role": "报告汇总",
-      "system_prompt": "你是负责汇总的编辑。将上游研究与统计结果写成 Markdown 报告。包含目标、证据、建议、样本限制和下一步。不要伪造未提供的材料。",
+      "role": "Report synthesis",
+      "system_prompt": "You are the team's report editor. Combine the upstream research and statistics into a Markdown report covering the goal, evidence, recommendations, sample limitations, and next steps. Do not invent facts or sources.",
       "provider": "openai",
       "model": "",
       "credential_ref": "OPENAI_API_KEY",
@@ -102,8 +102,8 @@
       "config": {
         "agent_id": "researcher",
         "owner_id": "member-1",
-        "instructions": "阅读输入中的示例访谈，归纳出行障碍、两项行动机会和证据限制。",
-        "acceptance": "只使用提供的示例资料，清楚区分事实和建议；标注样本限制。",
+        "instructions": "Read the example interview notes. Identify barriers to sustainable travel, two practical opportunities for action, and the limits of the evidence.",
+        "acceptance": "Use only the supplied example materials. Clearly distinguish evidence from recommendations and state the sample limitations.",
         "output_format": "markdown",
         "permissions": {
           "read": [],
@@ -135,8 +135,8 @@
       "config": {
         "agent_id": "analyst",
         "owner_id": "member-2",
-        "instructions": "分析示例调查 CSV 中每种出行方式的人数和占比。返回 JSON 对象：content 为简短说明，data 为包含 mode、students、share_percent 的数组。",
-        "acceptance": "只使用提供的示例资料，清楚区分事实和建议；标注样本限制。",
+        "instructions": "Calculate the number of students and the percentage for each travel mode in the example survey CSV. Return a JSON object with a short explanation in content and a data array of rows with mode, students, and share_percent.",
+        "acceptance": "Use only the supplied example materials. Clearly distinguish evidence from recommendations and state the sample limitations.",
         "output_format": "json",
         "permissions": {
           "read": [],
@@ -183,8 +183,8 @@
       "config": {
         "agent_id": "editor",
         "owner_id": "member-3",
-        "instructions": "合并研究任务和分析任务提供的内容，写一份校园可持续出行 Markdown 报告。必须注明示例数据、样本限制和下一步验证计划。",
-        "acceptance": "只使用提供的示例资料，清楚区分事实和建议；标注样本限制。",
+        "instructions": "Combine the research and analysis results into a Markdown report on sustainable campus travel. Clearly label the example data and include sample limitations and a plan for further validation.",
+        "acceptance": "Use only the supplied example materials. Clearly distinguish evidence from recommendations and state the sample limitations.",
         "output_format": "markdown",
         "permissions": {
           "read": [],
@@ -213,7 +213,7 @@
       },
       "config": {
         "owner_id": "member-3",
-        "instructions": "请检查草稿中的示例标记、数字与建议。确认后才允许写出最终 report.md 和 summary.csv。",
+        "instructions": "Check the draft's example-data labels, calculations, and recommendations. Approve it before the final report.md and summary.csv files are written.",
         "join_rule": "all_selected"
       }
     },
@@ -369,7 +369,7 @@
       "id": "interviews",
       "name": "Example interviews",
       "path": "inputs/example-interviews.md",
-      "description": "虚构访谈，仅用于演示，不是真实受访者材料。",
+      "description": "Fictional interview notes for demonstration only; these are not records of real participants.",
       "example": true,
       "content": "# EXAMPLE INPUT — fictional interview notes\n\nThis file is invented teaching material, not a real research dataset.\n\n- Student A: I would cycle more often if there were covered racks near the library.\n- Student B: I take the bus, but departure information is hard to find.\n- Student C: Walking is convenient, but the last stretch is poorly signposted.\n\nUse these statements as illustrative themes only. Do not claim representativeness.\n"
     },
@@ -377,7 +377,7 @@
       "id": "survey",
       "name": "Example travel survey",
       "path": "inputs/example-survey.csv",
-      "description": "虚构的 40 人出行方式统计，仅用于演示。",
+      "description": "Fictional travel-mode counts for 40 students, provided for demonstration only.",
       "example": true,
       "content": "mode,students\nWalk,12\nBike,10\nBus,14\nCar,4\n"
     }
@@ -394,10 +394,10 @@
     "zoom": 0.58
   },
   "design_notes": [
-    "演示模板：内容与 mock 结果固定，不是 AI 生成。",
-    "访谈整理与数据分析没有互相依赖，因此并行执行。",
-    "汇总任务等待两个分支完成，只接收明确连接的数据。",
-    "最终文件必须等待 Member C 明确审核；负责人不授予凭证或文件权限。",
-    "执行模型名称暂未配置。mock 可直接运行；real 必须分别配置模型名与环境变量。"
+    "Demonstration template: the inputs and mock results are fixed examples, not AI-generated findings.",
+    "Interview synthesis and survey analysis have no mutual dependency, so they run in parallel.",
+    "The report task waits for both branches and reads only results shared through explicit data links.",
+    "Final files wait for Member C's explicit approval. Assigning a human owner does not grant credentials or file access.",
+    "Execution model names are not configured. Mock mode works immediately; real mode requires separate model IDs and credential environment variables."
   ]
 }
