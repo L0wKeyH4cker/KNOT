@@ -1,6 +1,6 @@
 # 验证记录
 
-验证日期：2026-11-06（America/New_York）。此文件只记录实际执行过的验证；mock、协议测试和真实模型调用分别记录。
+最新验证日期：2026-11-07（America/New_York）。此文件只记录实际执行过的验证；mock、协议测试和真实模型调用分别记录。
 
 ## 环境
 
@@ -13,14 +13,14 @@
 
 | 验证 | 实际结果 |
 | --- | --- |
-| Python 后端、执行器、导出集成测试 | 最新同次整合运行 **94 项：93 通过、1 跳过、0 失败** |
+| Python 后端、执行器、导出集成测试 | 最新同次整合运行 **109 项：108 通过、1 跳过、0 失败**，19.146 秒 |
 | 前端工作流、需求材料及存档迁移数据测试 | **16 项全部通过** |
 | Windows 启动器 | 实际解压 ZIP，执行 `start.bat`，创建 `.venv` 和 `.env`，成功运行至人工审核，退出码 2 |
 | macOS/Linux 启动器 | Git Bash `bash -n` 语法检查通过；没有在 macOS/Linux 主机上执行 |
 | 独立示例交付 | 导出 ZIP → 新目录解压 → mock 运行 → 审核暂停 → 显式确认 → 生成 report.md 和 summary.csv |
 | 前端生产构建 | `npm run build` 已通过：TypeScript 检查与 Vite 生产构建成功 |
-| 浏览器实际交互 | Playwright + 独立 Chrome：**15 项全部通过**，19.8 秒；包含 PDF 上传、文字提取、任务确认、生成与保存、下载，以及原有画布和运行包验证 |
-| 真实模型 API | **需求分析、工作流生成通过**：`gpt-6-luna` 处理两页合成 PDF，提取 3 项任务，生成 7 节点、14 连线；尚未实际执行生成工作流的 real Agent 任务 |
+| 浏览器实际交互 | Playwright + 独立 Chrome：**18 项全部通过**，23.5 秒；包含多 Agent 独立模型配置、PDF 上传、任务确认、生成与保存、下载，以及原有画布和运行包验证 |
+| 真实模型 API | **5 个模型调用通过**：OpenAI Luna、Sol、Astra，以及 DeepSeek V4 Pro、V4 Flash 兼容 ID；两条 real 工作流完成，其中一条跨服务商执行工具并传递结果。此前 Luna 的合成 PDF 需求分析及工作流生成也已通过 |
 
 KNOT 更名复验：生产构建通过；Python 94 项（93 通过、1 项系统权限跳过）、前端数据 16 项、浏览器 15 项全部完成。独立浏览器还验证了页面标题与可见品牌、旧版项目和项目库恢复，以及 `knot-workflow.zip` 下载名。生成的 `knot-demo.zip` 内 README、启动器和执行器均使用新名称，已重新独立运行到审核并在测试批准后交付。代码仅在旧存档兼容键及其测试中保留旧标识，不显示为产品名称。
 
@@ -54,7 +54,7 @@ npm run test:browser
 - **显式数据**：只有执行连线时，任务不会自动拿到上游结果；需要数据连线。
 - **权限**：工具调用同时检查 Agent/任务工具授权和文件路径授权；路径越界与未经允许的文件访问被阻止。大小写变化不能绕过最终 Output 文件保护。
 - **规划模型**：没有凭证时明确拒绝；输出须通过 schema 与图校验；最多初次生成加两次修复；不能增加文件权限、工具授权或编造成员技能。此部分使用测试替身检验协议，未进行真实模型生成。
-- **模型协议**：OpenAI Chat Completions 与 Anthropic Messages 的消息、工具调用、用量和错误处理有测试；有限工具轮数、缺 key、失败不回退均通过。另有真实 HTTP 请求到本地测试服务，覆盖混合两种适配器的 real 模式工作流、各任务独立上下文，以及慢响应流的总超时。它使用本地固定响应和测试凭证，不等同于提供商线上调用。
+- **模型协议**：OpenAI Chat Completions、官方 GPT-6 工具任务的 Responses、DeepSeek 推理工具续接和 Anthropic Messages 的消息、工具调用、用量及错误处理有测试；有限工具轮数、缺 key、失败不回退均通过。另有真实 HTTP 请求到本地测试服务，覆盖混合适配器的 real 模式工作流、各任务独立上下文、各端点独立凭证及慢响应流的总超时。本地服务使用固定响应和测试凭证；提供商线上验证另记在下方。
 - **凭证边界**：明显 key/secret 字段在前端保存前被拒绝；后端拒绝工作流内的环境凭证值；自定义凭证引用对应的值会被脱敏。ZIP 只含环境变量引用与空白 `.env.example`，无开发者绝对路径。
 
 验收在本地生成了 `artifacts/knot-demo.zip`、`artifacts/demo-verification.json`、`artifacts/demo-results/report.md`、`artifacts/demo-results/summary.csv` 和对应事件/状态日志。整个 `artifacts/` 目录已由 Git 忽略，不包含在仓库中；可运行下方演示验收命令重新生成。示例审核由验收过程明确模拟确认，不声称通过了人类身份认证。`python -m backend.export_example` 只重新生成 ZIP，不运行工作流、不生成成果、不自动审核。
@@ -69,7 +69,7 @@ npm run test:browser
 
 ## 已知限制
 
-- OpenAI 的需求分析和规划已完成一次真实调用验证；Anthropic 线上调用和生成工作流的真实 Agent 执行尚未验证。模型名须按用户账户填写。
+- OpenAI 与 DeepSeek 的真实任务执行已通过下方合成输入测试；Anthropic 仅完成本地协议测试。此前由 PDF 生成的 7 节点工作流尚未执行 real Agent 任务。模型可用性和输出质量仍取决于账户及实际任务。
 - macOS/Linux 启动脚本通过语法检查，尚未在相应系统上运行。
 - 单机无环工作流，不支持循环、跨机器调度、多人实时协作或身份认证。
 - 支持文本/CSV 和有限本地工具，不支持任意代码、shell、网页搜索、浏览器操作或 PPT 生成。
@@ -108,3 +108,26 @@ npm run test:browser
 另有一次独立的真实模型验证：使用用户已配置的 `gpt-6-luna`，将两页合成测试 PDF 的提取文本交给需求分析接口，得到 **3 项任务**；随后调用规划接口，得到 **7 个节点、14 条连线**，源材料完整保留。输入为虚构调查数据，未使用用户私有项目文档。详细记录仅保留在本地 `artifacts/requirements-live-check.json`，不随仓库发布。这证明本次分析和规划调用成功；`execution_run:false` 明确表示没有进一步执行真实 Agent 任务，也不能据此保证任意文档的分析质量。复验当前配置时，可在界面上传测试文档，依次点击 Analyze requirements 和 Generate workflow from requirements；这会发起真实模型调用，不属于默认测试套件。
 
 弹窗关闭、文档移除和字段锁定的小修完成后，针对最终生产构建再次运行五项需求浏览器用例，**5/5 通过，7.5 秒**。本地浏览器证据包括 `artifacts/browser/requirements-upload.png`、`requirements-review.png`、`requirements-runner.zip`，可用 `npm run test:browser` 重新生成。截图禁用了淡入动画，已检查上传入口和可编辑任务卡片显示完整。
+
+## 多服务商、多模型任务分工（2026-11-07）
+
+最新完整回归为 **109 项 Python 测试：108 通过、1 项系统符号链接权限跳过**；前端生产构建通过，前端数据测试 16 项通过，浏览器交互测试 18 项通过。更新后的示例 ZIP 已用 `scripts/verify_demo.py` 重新导出并独立运行，确认审核前无交付文件、测试批准后生成报告与 CSV。
+
+新增自动化覆盖：
+
+- `tests/test_multi_provider.py` 的 6 项测试使用三个独立 loopback HTTP 服务，分别校验模型、地址、认证和任务上下文；验证并行执行、显式结果传递、单个凭证缺失时零请求、401 后阻止下游且不回退 mock，以及导出 ZIP 在独立子进程中的 real 协议执行。
+- `tests/test_reasoning_providers.py` 的 9 项测试验证官方 GPT-6 工具任务路由至 Responses、第三方兼容地址仍走 Chat Completions、完整工具续接、推理内容不进入结果、DeepSeek 推理字段回传，以及异常输出、重复调用 ID、工具权限、轮数和超时检查。
+- `tests/browser/providers.spec.ts` 的 3 项测试验证三个 Agent 的独立配置、任务绑定、保存刷新及 JSON 导出；切换服务商清空模型和地址，规划模型独立；未知凭证引用显示“未检查”，不误报“缺失”。浏览器测试不会请求线上模型。
+
+真实 API 测试使用用户已配置的本地环境凭证，未打印或修改密钥；输入仅包含合成标记和测试文本文件，没有用户项目文档：
+
+| 实际流程 | 结果 |
+| --- | --- |
+| `gpt-6-luna` 与 `gpt-6-sol` 并行返回各自标记 → `gpt-6-astra` 接收两份结果并汇总 | 3 个任务成功，整体 completed；三个 OpenAI 模型 ID 的只读查询也均返回 HTTP 200 |
+| `deepseek-v4-pro` 与 `deepseek-v4-flash` 并行读取测试文件 → `gpt-6-astra` 接收两份结果、读取同一测试文件并汇总 | 3 个任务成功，各调用一次 `read_text`，返回预期标记，整体 completed |
+
+第二条流程实际验证了 DeepSeek Chat Completions 的推理工具续接和 OpenAI Astra Responses 的工具续接。针对官方 `api.openai.com` 地址的 `gpt-6*` 工具任务自动选择 Responses；其他兼容地址保持 Chat Completions。推理上下文只用于本次 API 续接，不写入任务结果或日志。
+
+本地证据为 `artifacts/selected-models-check.json` 和 `artifacts/mixed-models-live-check.json`，均不提交 Git。前一份记录生成时尚未配置 DeepSeek，因此其 `deepseek_live_verified:false` 是当时状态；用户随后配置凭证，后一份记录已确认 DeepSeek 与 Astra 的混合流程成功。此次测试证明连通、模型路由、工具执行及结果传递，不是通用任务能力或输出质量评测。
+
+模型名与当前映射参考 [OpenAI GPT-6 工具调用说明](https://developers.openai.com/api/docs/guides/latest-model)、[DeepSeek 接口说明](https://api-docs.deepseek.com/) 和 [DeepSeek 推理工具调用说明](https://api-docs.deepseek.com/guides/thinking_mode/)。其中 `deepseek-v4-flash` 是兼容名称，目前由 DeepSeek-V4.1-Flash-1017 提供服务；此次保留并实测了用户指定的旧 ID，不声称调用已下线的原 V4 Flash 版本。

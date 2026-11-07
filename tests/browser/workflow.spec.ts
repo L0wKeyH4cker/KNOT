@@ -230,7 +230,9 @@ test('AI is honest when credentials are absent; task model and planner are separ
     .getByLabel('Credential environment variable', { exact: true })
     .fill('KNOT_TEST_MISSING_KEY');
   await expect(
-    page.getByText('No credential detected. Real AI generation is unavailable until configured.'),
+    page.getByText(
+      'Credential status not checked for this reference. The backend will check it when you run analysis or generation.',
+    ),
   ).toBeVisible();
   await page.getByLabel('Planning model', { exact: true }).fill('user-configured-model');
   await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();

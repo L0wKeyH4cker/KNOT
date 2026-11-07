@@ -78,7 +78,7 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 
 ## 模型与凭证
 
-规划模型负责生成结构化草案；任务 Agent 各自使用单独配置的模型连接。支持 OpenAI Chat Completions 与 Anthropic Messages 两种 API 适配方式，模型名称由用户填写。
+规划模型负责生成结构化草案；任务 Agent 各自使用单独配置的模型连接。支持 OpenAI 兼容接口与 Anthropic Messages；OpenAI 官方 GPT-6 模型执行带工具的任务时自动使用 Responses，模型名称由用户填写。
 
 工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY`，不要把真实 key 放进节点、prompt、JSON 或浏览器。真实 key 在启动后端或运行包的环境中配置；参考 `.env.example` 和导出包内的 `.env.example`。
 
@@ -90,6 +90,38 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 - **real**：调用真实 API。缺少模型、凭证或 API 调用失败时明确报错，不会切换到 mock。
 
 已使用用户配置的 `gpt-6-luna` 完成真实需求分析和工作流生成：两页合成测试 PDF 提取出 3 项任务，生成 7 个节点、14 条连线。尚未执行这条工作流的真实 Agent 任务。完整验证状态见 [验证记录](docs/VERIFICATION.md)。本次调用的详细记录仅保留在本地 `artifacts/requirements-live-check.json`；可在界面上传自己的测试文档，再依次分析和生成，验证当前 API 配置。
+
+## 不同任务使用不同 API 和模型
+
+同一个 KNOT 执行器可以连接多个模型服务。打开 **Agents**，分别为每个 Agent 设置 **Provider、Model name、Credential reference、API base URL**；然后在画布上的 **Agent Task → Agent** 选择负责该任务的 Agent。例如：
+
+| 工作 | Agent | 接口协议 | 模型 | 凭证引用 |
+| --- | --- | --- | --- | --- |
+| 资料分析 | Analyst | OpenAI-compatible | 服务 A 的模型 ID | `ANALYSIS_API_KEY` |
+| 撰写初稿 | Writer | Anthropic | 服务 B 的模型 ID | `WRITING_API_KEY` |
+| 审校汇总 | Reviewer | OpenAI-compatible | 服务 C 的模型 ID | `REVIEW_API_KEY` |
+
+三个 Agent 可以使用不同 API 地址和密钥；这是配置示意，模型 ID 和地址需要按你的服务填写。一个 Agent 被多个任务复用时，这些任务共享该 Agent 的模型配置。要用不同模型，应建立不同 Agent。切换接口提供商会清空原模型和地址，避免使用上一家服务的配置。
+
+以下五个模型已在 2026-11-07 用真实 API 验证通过。在界面中它们的 Provider 均选 **OpenAI-compatible**，再填写各自的地址和凭证引用：
+
+| 模型 | Model name | API base URL | Credential reference |
+| --- | --- | --- | --- |
+| OpenAI Luna | `gpt-6-luna` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| OpenAI Sol | `gpt-6-sol` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| OpenAI Astra | `gpt-6-astra` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| DeepSeek V4 Pro | `deepseek-v4-pro` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| DeepSeek V4 Flash（兼容名称） | `deepseek-v4-flash` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+
+`deepseek-v4-flash` 仍可调用，但按 [DeepSeek 官方说明](https://api-docs.deepseek.com/)，这个旧 ID 当前指向 DeepSeek-V4.1-Flash-1017；这里保留用户指定的 ID，不代表测试了已经下线的旧版模型。
+
+实际跑通了两条测试流程：Luna 与 Sol 并行执行，交给 Astra 汇总；DeepSeek V4 Pro 与 V4 Flash 并行读取合成测试文件，再由 Astra 接收两份结果并汇总。后一条流程的三个任务各成功调用一次 `read_text` 工具。这验证了真实调用、工具执行和跨服务商结果传递，不是任务质量评测。
+
+OpenAI 兼容服务默认使用 **Chat Completions**（基础地址后追加 `/chat/completions`）；Anthropic 使用 **Messages**（追加 `/messages`）。OpenAI 官方地址上的 `gpt-6*` 模型在启用工具时自动使用 **Responses**（追加 `/responses`），按 [OpenAI 工具调用说明](https://developers.openai.com/api/docs/guides/latest-model) 处理推理模型的工具续接。DeepSeek 工具续接保留接口要求的推理上下文，但不将其保存到任务结果或日志。填写 Base URL 时不要包含最终请求路径。第三方服务仍需兼容 Chat Completions 或 Messages；仅提供 Responses 或原生 Gemini 的第三方接口目前不能直接接入。
+
+任务之间用执行连线控制先后顺序，用数据连线传递结果。独立任务可以并行，汇总任务等依赖完成后执行。AI designer 的规划模型单独配置，不会代替执行 Agent 的模型设置。生成画布后，仍需配置每个任务 Agent。
+
+下载 **Export runner** 后，在运行包的 `.env` 中为上述引用填写真实密钥，然后运行 `python run.py --mode real`。默认 mock 模式只验证流程；编辑器的后端配置也不会把密钥复制进下载包。自定义凭证引用显示“未检查”时，表示健康检查没有报告该名称，不能据此判定密钥不存在；真正调用时后端会检查它。
 
 ## Git 协作
 
@@ -130,7 +162,7 @@ npm run test:browser
 
 Windows 会自动使用默认安装目录中的 Google Chrome。其它环境或没有该 Chrome 时，先运行 `npx playwright install chromium`，也可以将 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 环境变量设为已有浏览器的可执行文件路径。
 
-已完成生产构建、**94 项 Python 验收（93 通过、1 个系统权限相关用例跳过）**、16 项前端数据测试和 **15 项浏览器交互测试**。前端数据测试包含旧版项目迁移、避免覆盖新存档及写入失败后的数据保留。浏览器测试包括真实 PDF 上传与文字提取、任务清单编辑、生成后保存和 JSON/ZIP 导出，也保留了实际拖拽、连线和下载包独立运行的验证。浏览器中的模型响应使用明确的测试数据，真实 API 验证单独记录。完整结果和跳过项见 [验证记录](docs/VERIFICATION.md)。运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成需求上传、任务确认、桌面画布和小屏画布截图；这些文件不随仓库发布。
+已完成生产构建、**109 项 Python 验收（108 通过、1 个系统权限相关用例跳过）**、16 项前端数据测试和 **18 项浏览器交互测试**。前端数据测试包含旧版项目迁移、避免覆盖新存档及写入失败后的数据保留。浏览器测试包括真实 PDF 上传与文字提取、任务清单编辑、生成后保存、JSON/ZIP 导出、多 Agent 独立模型配置和切换服务商，也保留了实际拖拽、连线和下载包独立运行的验证。浏览器中的模型响应使用明确的测试数据，真实 API 验证单独记录。完整结果和跳过项见 [验证记录](docs/VERIFICATION.md)。运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成需求上传、任务确认、桌面画布和小屏画布截图；这些文件不随仓库发布。
 
 MVP 限定为单机、无环工作流。支持读取文本/CSV、基础 CSV 汇总、写入 Markdown/JSON/CSV，不提供任意 shell、代码执行、联网搜索或浏览器工具。负责人成员信息不会授予凭证或文件访问权限。
 

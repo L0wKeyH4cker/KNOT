@@ -65,7 +65,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         if path == "/api/health":
-            self.send_json(200, {"ok": True, "planner_credentials": {key: bool(os.environ.get(key, "").strip()) for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")}})
+            self.send_json(200, {"ok": True, "planner_credentials": {key: bool(os.environ.get(key, "").strip()) for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY")}})
         elif path == "/api/template":
             self.send_json(200, load_template())
         elif path.startswith("/api/"):

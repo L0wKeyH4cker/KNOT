@@ -91,6 +91,7 @@ export function AgentsSettings({ wf, change }: { wf: Workflow; change: (w: Workf
                   onChange={(e) =>
                     update({
                       provider: e.target.value as Agent['provider'],
+                      model: '',
                       credential_ref:
                         e.target.value === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY',
                       base_url: '',
@@ -411,6 +412,7 @@ export function PlannerSettings({
               setPlanner({
                 ...planner,
                 provider: e.target.value as Planner['provider'],
+                model: '',
                 credential_ref:
                   e.target.value === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY',
                 base_url: '',
@@ -455,9 +457,11 @@ export function PlannerSettings({
       </Field>
       <div className={`credential-status ${credentials[planner.credential_ref] ? 'ready' : ''}`}>
         <KeyRound size={16} />
-        {credentials[planner.credential_ref]
+        {credentials[planner.credential_ref] === true
           ? 'Credential detected on local backend'
-          : 'No credential detected. Real AI generation is unavailable until configured.'}
+          : credentials[planner.credential_ref] === false
+            ? 'No credential detected. Real AI generation is unavailable until configured.'
+            : 'Credential status not checked for this reference. The backend will check it when you run analysis or generation.'}
       </div>
       {!configurationOnly && (
         <>

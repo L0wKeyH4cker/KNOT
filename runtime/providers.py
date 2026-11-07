@@ -1,12 +1,16 @@
-"""Real HTTP adapters: OpenAI Chat Completions and Anthropic Messages.
+"""Real HTTP adapters: OpenAI Responses/Chat and Anthropic Messages.
 
 References checked 2026-11-06:
 https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
 https://platform.claude.com/docs/en/api/messages/create
+Tool-loop compatibility checked 2026-11-07:
+https://developers.openai.com/api/docs/guides/function-calling
+https://api-docs.deepseek.com/guides/thinking_mode/
 No provider errors ever fall back to mock output.
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 import socket
@@ -187,6 +191,88 @@ def _parse_result(content: str, usage: list[dict]) -> dict:
     return redact({"content": content, "data": data, "usage": usage})
 
 
+def _responses_complete(base, credential, model, system, prompt, tools, tool_executor,
+                        deadline, max_tool_rounds):
+    """Stateless Responses tool loop; reasoning stays only in provider context."""
+    history = [{"role": "user", "content": prompt}]
+    definitions = [{"type": "function", "name": item["name"], "description": item["description"],
+                    "parameters": item["parameters"], "strict": False} for item in tools]
+    allowed_names = {item["name"] for item in tools}
+    seen_calls, usage = set(), []
+    for round_number in range(max_tool_rounds + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Task model/tool deadline exceeded")
+        payload = {"model": model, "instructions": system, "input": copy.deepcopy(history),
+                   "tools": definitions, "store": False, "include": ["reasoning.encrypted_content"]}
+        response = _post(base + "/responses", {"Authorization": "Bearer " + credential}, payload, remaining)
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Task model/tool deadline exceeded")
+        if response.get("status") != "completed" or response.get("error"):
+            raise ProviderError("Responses request did not complete")
+        if isinstance(response.get("usage"), dict):
+            usage.append({"provider": "openai", **response["usage"]})
+        output = response.get("output")
+        if not isinstance(output, list):
+            raise ProviderError("Responses returned invalid output")
+        calls, texts, new_ids = [], [], set()
+        # Validate every item before invoking any local tool in this response.
+        for item in output:
+            if not isinstance(item, dict) or item.get("status") in ("incomplete", "in_progress", "failed"):
+                raise ProviderError("Responses returned an invalid or unfinished item")
+            kind = item.get("type")
+            if kind == "reasoning":
+                continue
+            if kind == "message":
+                blocks = item.get("content")
+                if item.get("role") != "assistant" or not isinstance(blocks, list):
+                    raise ProviderError("Responses returned an invalid assistant message")
+                for block in blocks:
+                    if not isinstance(block, dict):
+                        raise ProviderError("Responses returned invalid message content")
+                    if block.get("type") == "refusal":
+                        raise ProviderError("Model declined this request")
+                    if block.get("type") != "output_text" or not isinstance(block.get("text"), str):
+                        raise ProviderError("Responses returned unsupported message content")
+                    texts.append(block["text"])
+            elif kind == "function_call":
+                call_id = item.get("call_id")
+                if not isinstance(call_id, str) or not call_id or call_id in seen_calls or call_id in new_ids:
+                    raise ProviderError("Responses returned a missing or duplicate tool call ID")
+                if not isinstance(item.get("name"), str) or item["name"] not in allowed_names or tool_executor is None:
+                    raise PermissionError("Only configured local function tools are supported")
+                try:
+                    arguments = json.loads(item["arguments"])
+                except (KeyError, TypeError, ValueError):
+                    raise ProviderError("Model returned malformed tool arguments") from None
+                if not isinstance(arguments, dict):
+                    raise ProviderError("Tool arguments must be a JSON object")
+                new_ids.add(call_id)
+                calls.append((item, arguments))
+            else:
+                raise ProviderError("Responses returned an unsupported output item")
+        if not calls:
+            content = "\n".join(texts)
+            if not content.strip():
+                raise ProviderError("Responses returned no usable text")
+            return _parse_result(content, usage)
+        if round_number >= max_tool_rounds:
+            raise ProviderError("Maximum tool-call rounds exceeded")
+        if len(calls) > 16:
+            raise ProviderError("Too many tool calls in one model round")
+        # Retain reasoning (including encrypted state), messages and call items
+        # exactly for continuation, without storing or returning them to the app.
+        history.extend(copy.deepcopy(output))
+        seen_calls.update(new_ids)
+        for call, arguments in calls:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Task model/tool deadline exceeded")
+            result = tool_executor(call["name"], arguments)
+            history.append({"type": "function_call_output", "call_id": call["call_id"],
+                            "output": json.dumps(redact(result), ensure_ascii=False)})
+    raise ProviderError("Maximum model rounds exceeded")
+
+
 def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = None,
              tool_executor: Callable[[str, dict], Any] | None = None,
              timeout: float = 60, max_tool_rounds: int = 4) -> dict:
@@ -211,6 +297,9 @@ def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = N
         raise ProviderError("Provider base_url must use HTTPS or loopback HTTP without credentials")
     tools = tools or []
     deadline = time.monotonic() + timeout
+    if provider == "openai" and parsed.hostname == "api.openai.com" and model.startswith("gpt-6") and tools:
+        return _responses_complete(base, credential, model, system, prompt, tools,
+                                   tool_executor, deadline, max_tool_rounds)
     usage = []
     messages = [{"role": "user", "content": prompt}]
     if provider == "openai":
@@ -243,7 +332,12 @@ def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = N
                 return _parse_result(content, usage)
             if round_number >= max_tool_rounds:
                 raise ProviderError("Maximum tool-call rounds exceeded")
-            messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": calls})
+            assistant = {"role": "assistant", "content": message.get("content"), "tool_calls": calls}
+            # Thinking-enabled compatible providers require this on tool-loop
+            # continuation. It remains request-local and is never a result/log.
+            if isinstance(message.get("reasoning_content"), str):
+                assistant["reasoning_content"] = message["reasoning_content"]
+            messages.append(assistant)
             if len(calls) > 16:
                 raise ProviderError("Too many tool calls in one model round")
             for call in calls:
