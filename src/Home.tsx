@@ -1,4 +1,13 @@
-import { ArrowRight, ArrowUp, Blocks, ChevronRight, FolderOpen, Paperclip } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUp,
+  ArrowUpRight,
+  Blocks,
+  ChevronRight,
+  FolderOpen,
+  Github,
+  Paperclip,
+} from 'lucide-react';
 import type { Workflow } from './model';
 import { useEffect, useRef } from 'react';
 
@@ -65,6 +74,18 @@ export default function Home({
           </h1>
           <p>What would you like to work on together?</p>
         </div>
+
+        <a
+          className="home-github"
+          href="https://github.com/L0wKeyH4cker/KNOT"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="View KNOT on GitHub (opens in a new tab)"
+        >
+          <Github size={16} aria-hidden="true" />
+          View on GitHub
+          <ArrowUpRight size={14} aria-hidden="true" />
+        </a>
 
         <form
           className="idea-composer"

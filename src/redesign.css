@@ -189,6 +189,37 @@ select:focus {
   margin-top: 13px;
 }
 
+.home-github {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 20px auto 24px;
+  padding: 9px 14px;
+  border: 1px solid #dfe3f2;
+  border-radius: 999px;
+  background: #ffffffb3;
+  color: #545d7e;
+  font-size: 12px;
+  font-weight: 550;
+  text-decoration: none;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s;
+}
+
+.home-github:hover {
+  border-color: #aebce8;
+  background: #fff;
+  color: #2946ad;
+}
+
+.home-github + .idea-composer {
+  margin-top: 0;
+}
+
 .idea-composer {
   margin-top: 28px;
   padding: 6px;

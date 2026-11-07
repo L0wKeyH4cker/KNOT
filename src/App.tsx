@@ -38,7 +38,6 @@ import {
   ArrowLeft,
   Trash2,
   Cable,
-  BookOpen,
   LoaderCircle,
 } from 'lucide-react';
 import Home from './Home';
@@ -66,6 +65,7 @@ import {
 import type { Workflow, Block, NodeKind, Link, Issue } from './model';
 const nodeTypes = { block: BlockNode };
 const GuidedTour = lazy(() => import('./GuidedTour'));
+const QuickGuide = lazy(() => import('./QuickGuide'));
 const STORAGE = KNOT_STORAGE,
   LIBRARY = KNOT_LIBRARY,
   PLANNER = 'knot.planner.v1';
@@ -1499,66 +1499,16 @@ export default function App() {
                 </div>
               )}
               {modal === 'help' && (
-                <div className="help-content">
-                  <button
-                    className="secondary guided-tour-replay"
-                    disabled={!!busy}
-                    onClick={startGuidedExample}
-                  >
-                    <MousePointer2 size={16} /> Take a guided tour <ArrowRight size={15} />
-                  </button>
-                  <div className="note">
-                    <BookOpen size={18} />
-                    The canvas is the source of truth. The ZIP contains exactly the workflow you
-                    design.
-                  </div>
-                  <h3>Build a workflow</h3>
-                  <ol>
-                    <li>
-                      Drag a block from the library. Click it to configure its task, agent, and
-                      human owner.
-                    </li>
-                    <li>
-                      Connect side ports for execution order. Connect blue top/bottom ports to share
-                      data.
-                    </li>
-                    <li>
-                      Use Parallel for independent branches. A join waits for all selected branches
-                      to settle.
-                    </li>
-                    <li>
-                      Add Human Review before Output to pause delivery until a person approves.
-                    </li>
-                    <li>
-                      Run Check, then export the ZIP. Use the included launch script in a new
-                      folder.
-                    </li>
-                  </ol>
-                  <h3>Two honest run modes</h3>
-                  <p>
-                    <strong>Mock</strong> uses fixed example results, without API calls.{' '}
-                    <strong>Real</strong> uses the models and environment credentials you configure;
-                    failures never fall back to mock.
-                  </p>
-                  <h3>Canvas shortcuts</h3>
-                  <div className="shortcut-grid">
-                    <span>Undo / Redo</span>
-                    <kbd>Ctrl Z / Ctrl Shift Z</kbd>
-                    <span>Duplicate selected block</span>
-                    <kbd>Ctrl D</kbd>
-                    <span>Delete block or connection</span>
-                    <kbd>Delete</kbd>
-                    <span>Save project</span>
-                    <kbd>Ctrl S</kbd>
-                    <span>Pan / zoom</span>
-                    <kbd>Drag background / scroll</kbd>
-                  </div>
-                  <p className="muted small">
-                    Layout snapping only moves blocks. A connection is created only by joining
-                    compatible ports. Select a connection to delete it; drag an endpoint to
-                    reconnect.
-                  </p>
-                </div>
+                <Suspense fallback={<p className="muted">Loading the visual guide…</p>}>
+                  <QuickGuide
+                    busy={!!busy}
+                    onTour={startGuidedExample}
+                    onHome={() => {
+                      setFocusHomeComposer(true);
+                      navigate('home');
+                    }}
+                  />
+                </Suspense>
               )}
               {modal === 'exported' && (
                 <div className="exported-content">
