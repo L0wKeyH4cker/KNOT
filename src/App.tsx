@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   Controls,
+  ControlButton,
   MiniMap,
   applyNodeChanges,
   useReactFlow,
@@ -1042,11 +1043,6 @@ export default function App() {
             </header>
             <section className="project-bar">
               <div>
-                <div className="breadcrumb">
-                  <button onClick={openLibrary}>My projects</button>
-                  <ChevronRight size={12} />
-                  <span>Workflow studio</span>
-                </div>
                 <div className="project-name">
                   <h1>{wf.project.name}</h1>
                   <button
@@ -1056,7 +1052,6 @@ export default function App() {
                   >
                     <ChevronDown size={18} />
                   </button>
-                  <span className="draft-badge">DRAFT</span>
                 </div>
               </div>
               <div className="project-actions">
@@ -1113,7 +1108,6 @@ export default function App() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
-                  <div className="section-label">YOUR TOOLKIT</div>
                   <div className="palette">
                     {(Object.keys(KINDS) as NodeKind[])
                       .filter((k) => KINDS[k].name.toLowerCase().includes(search.toLowerCase()))
@@ -1142,7 +1136,6 @@ export default function App() {
                             </span>
                             <span>
                               <strong>{meta.name}</strong>
-                              <small>{meta.description}</small>
                             </span>
                             <GripVertical size={15} className="grip" />
                           </button>
@@ -1253,7 +1246,16 @@ export default function App() {
                       gap={22}
                       size={1}
                     />
-                    <Controls showInteractive={false} />
+                    <Controls showInteractive={false}>
+                      <ControlButton
+                        className="canvas-read-size"
+                        title="Read at 100%"
+                        aria-label="Read at 100%"
+                        onClick={() => void flow.zoomTo(1, { duration: 250 })}
+                      >
+                        100%
+                      </ControlButton>
+                    </Controls>
                     <MiniMap
                       nodeColor={(n) => KINDS[(n.data.block as Block).type].color}
                       maskColor="#f4f6f0bb"
@@ -1374,9 +1376,7 @@ export default function App() {
             <div className="onboarding-form">
               {wizard === 1 ? (
                 <>
-                  <span className="eyebrow">NEW PROJECT</span>
-                  <h2>A few details, then you’re off.</h2>
-                  <p className="muted">Give your project a name and a direction.</p>
+                  <h2>Create a project</h2>
                   <button
                     className="start-choice ai requirement-start"
                     onClick={() => {
@@ -1400,7 +1400,6 @@ export default function App() {
                     </span>
                     <span>
                       <strong>Upload project requirements</strong>
-                      <small>PDF → tasks & deliverables → workflow</small>
                     </span>
                     <ArrowUpRight size={19} />
                   </button>
@@ -1466,10 +1465,6 @@ export default function App() {
                         onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
                       />
                     </Field>
-                    <p className="muted small">
-                      We’ll create member placeholders. Add names, skills, and materials whenever
-                      you’re ready.
-                    </p>
                     <button type="submit" className="primary full">
                       Create project
                       <ArrowRight size={16} />
@@ -1482,11 +1477,7 @@ export default function App() {
                     <ArrowLeft size={14} />
                     Back
                   </button>
-                  <span className="eyebrow">YOUR PROJECT IS READY</span>
                   <h2>How would you like to start?</h2>
-                  <p className="muted">
-                    Two starting points. One canvas. Every block stays yours to change.
-                  </p>
                   <button
                     className="start-choice"
                     onClick={() => {

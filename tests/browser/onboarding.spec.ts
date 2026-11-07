@@ -56,7 +56,11 @@ test('first-visit tour explains every area, remembers completion and restores th
   // Keyboard focus stays in the coachmark, away from the inert editor.
   await expect(tour.getByRole('button', { name: 'Next', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
+  await expect(tour.getByRole('button', { name: 'Back to home', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
   await expect(tour.getByRole('button', { name: 'Close tour' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(tour.getByRole('button', { name: 'Back to home', exact: true })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(tour.getByRole('button', { name: 'Next', exact: true })).toBeFocused();
 

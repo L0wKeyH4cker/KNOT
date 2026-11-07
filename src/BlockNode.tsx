@@ -33,20 +33,13 @@ export default function BlockNode({
     Icon = icons[n.type as NodeKind];
   const agent = w.agents.find((a) => a.id === n.config.agent_id),
     owner = w.project.members.find((m) => m.id === n.config.owner_id);
+  // Keep the overview focused on the task; full instructions live in its inspector.
   const detail =
-    n.type === 'agent_task'
-      ? n.config.instructions || 'Add task instructions'
-      : n.type === 'shared_resource'
-        ? `${n.config.resource_ids?.length || 0} input resources`
-        : n.type === 'parallel'
-          ? 'Independent tasks run together'
-          : n.type === 'condition'
-            ? `${n.config.field} ${n.config.operator} ${JSON.stringify(n.config.value)}`
-            : n.type === 'human_review'
-              ? 'Pauses until a person approves'
-              : n.type === 'output'
-                ? `${n.config.mappings?.length || 0} delivery files`
-                : 'Your team’s starting point';
+    n.type === 'shared_resource'
+      ? `${n.config.resource_ids?.length || 0} input resources`
+      : n.type === 'condition'
+        ? `${n.config.field} ${n.config.operator} ${JSON.stringify(n.config.value)}`
+        : null;
   return (
     <div
       className={`block-card ${selected ? 'is-selected' : ''} ${n.type}`}
@@ -70,7 +63,7 @@ export default function BlockNode({
         <MoreHorizontal size={16} className="block-more" />
       </div>
       <h3>{n.label}</h3>
-      <p>{detail}</p>
+      {detail && <p>{detail}</p>}
       {n.type === 'agent_task' && (
         <div className="block-footer">
           <span>

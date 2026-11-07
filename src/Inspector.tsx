@@ -167,9 +167,7 @@ export default function Inspector({
               <ShieldCheck size={14} />
               Tools & permissions
             </div>
-            <p className="muted small">
-              A tool must also be enabled on the agent. File paths are checked when the tool runs.
-            </p>
+            <p className="muted">Enable tools on both this task and its agent.</p>
             <CheckList
               values={TOOLS}
               selected={c.tools || []}
@@ -255,8 +253,7 @@ export default function Inspector({
               />
             </Field>
             <div className="note amber">
-              The exported runner pauses here. The assigned member must explicitly approve before
-              downstream tasks can continue.
+              The runner pauses here until the assigned reviewer explicitly approves.
             </div>
           </>
         )}
@@ -307,15 +304,13 @@ export default function Inspector({
               />
             </Field>
             <div className="note">
-              Use the T and F output ports. Unselected paths are marked skipped.
+              T runs when true; F runs when false. The other branch is skipped.
             </div>
           </>
         )}
         {node.type === 'output' && (
           <>
-            <p className="muted small">
-              Map a connected data source to a file. Files are created only when this block runs.
-            </p>
+            <p className="muted">Choose results to save as files when this block runs.</p>
             {(c.mappings || []).map((m, i) => (
               <div className="mapping-card" key={i}>
                 <Field label="Source result">
@@ -396,14 +391,11 @@ export default function Inspector({
         )}
         {node.type === 'parallel' && (
           <div className="note">
-            Connect multiple output paths to run tasks concurrently. The project concurrency limit
-            controls how many can run at once.
+            Connect several tasks to run in parallel, up to your project's concurrency limit.
           </div>
         )}
         {node.type === 'start' && (
-          <div className="note">
-            Every execution path starts here. Drag from the right port to connect the next block.
-          </div>
+          <div className="note">Drag from the right port to connect the first task.</div>
         )}
         {node.type !== 'start' && (
           <>
@@ -420,7 +412,7 @@ export default function Inspector({
                 <option value="all_success">Require every branch to succeed</option>
               </select>
             </Field>
-            <p className="muted small">
+            <p className="muted">
               {c.join_rule === 'all_success'
                 ? 'A skipped branch skips this block.'
                 : 'Skipped branches do not block a selected path.'}
@@ -430,7 +422,7 @@ export default function Inspector({
                 {dataSources.length ? (
                   dataSources.map((n) => <span key={n.id}>{n.label}</span>)
                 ) : (
-                  <p>No data connected. Use the blue ports to share an upstream result.</p>
+                  <p>Connect the blue ports to share an upstream result.</p>
                 )}
               </div>
             </Field>

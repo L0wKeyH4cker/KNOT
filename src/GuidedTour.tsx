@@ -141,7 +141,7 @@ export default function GuidedTour({
     return () => window.removeEventListener('keydown', keyboard, true);
   }, [onClose]);
 
-  const width = Math.min(352, layout.width - margin * 2);
+  const width = Math.min(420, layout.width - margin * 2);
   let left = (layout.width - width) / 2;
   let top = (layout.height - layout.cardHeight) / 2;
   const anchor = layout.anchor;
@@ -214,7 +214,7 @@ export default function GuidedTour({
       >
         <div className="tour-card-top">
           <span className="tour-step-label">
-            {complete ? 'ALL SET' : `QUICK TOUR · ${step + 1} OF ${TOUR_STEPS.length - 1}`}
+            {complete ? 'Tour complete' : `Step ${step + 1} of ${TOUR_STEPS.length - 1}`}
           </span>
           <button className="tour-close" aria-label="Close tour" onClick={onClose}>
             <X size={16} />
@@ -239,11 +239,6 @@ export default function GuidedTour({
           <button className="tour-previous" disabled={step === 0} onClick={() => onStep(step - 1)}>
             <ArrowLeft size={14} /> Previous
           </button>
-          {!complete && (
-            <button className="tour-home" onClick={onHome}>
-              Back to home
-            </button>
-          )}
           <button
             ref={next}
             className="primary tour-next"
@@ -260,6 +255,11 @@ export default function GuidedTour({
               </>
             )}
           </button>
+          {!complete && (
+            <button className="tour-home" onClick={onHome}>
+              Back to home
+            </button>
+          )}
         </div>
       </section>
     </div>,
