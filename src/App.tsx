@@ -35,14 +35,14 @@ import {
   MousePointer2,
   GripVertical,
   ArrowRight,
-  Users,
   ArrowLeft,
   Trash2,
   Cable,
   BookOpen,
-  CheckCheck,
   LoaderCircle,
 } from 'lucide-react';
+import Home from './Home';
+import { usePage } from './navigation';
 import BlockNode, { icons } from './BlockNode';
 import Inspector, { Field } from './Inspector';
 import { AgentsSettings, ProjectSettings } from './Settings';
@@ -74,12 +74,58 @@ function restore() {
 }
 const restored = restore();
 type Modal = 'agents' | 'project' | 'planner' | 'check' | 'saved' | 'help' | 'exported' | null;
+const secondaryPages = new Set([
+  'agents',
+  'project',
+  'planner',
+  'check',
+  'saved',
+  'help',
+  'exported',
+]);
+function readProjects(): Workflow[] {
+  try {
+    return (JSON.parse(localStorage.getItem(LIBRARY) || '[]') as unknown[]).map(parseWorkflow);
+  } catch {
+    return [];
+  }
+}
+function hasProject(workflow: Workflow) {
+  return (
+    workflow.nodes.length > 0 ||
+    !!workflow.project.goal.trim() ||
+    workflow.project.name !== 'Untitled project'
+  );
+}
 export default function App() {
+  const [page, navigate] = usePage();
+  const modalOrigin = useRef<'home' | 'canvas'>(
+    page === 'saved' || page === 'help' ? 'home' : 'canvas',
+  );
+  const modal = secondaryPages.has(page) ? (page as Modal) : null;
+  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+  const wizard = page === 'new' ? wizardStep : 0;
+  const setModal = useCallback(
+    (next: Modal) => {
+      if (next) {
+        if (!secondaryPages.has(page)) modalOrigin.current = page === 'home' ? 'home' : 'canvas';
+        navigate(next);
+      } else {
+        navigate(modalOrigin.current);
+      }
+    },
+    [page, navigate],
+  );
+  const setWizard = (next: 0 | 1 | 2) => {
+    if (next === 0) navigate('canvas');
+    else {
+      setWizardStep(next);
+      navigate('new');
+    }
+  };
   const [wf, setWf] = useState<Workflow>(restored || emptyWorkflow),
     [selected, setSelected] = useState<string | null>(null),
     [edgeSelected, setEdgeSelected] = useState<string | null>(null),
-    [modal, setModal] = useState<Modal>(null),
-    [wizard, setWizard] = useState<0 | 1 | 2>(restored ? 0 : 1),
     [issues, setIssues] = useState<Issue[]>([]),
     [toast, setToast] = useState(''),
     [busy, setBusy] = useState(''),
@@ -89,7 +135,7 @@ export default function App() {
     [credentials, setCredentials] = useState<Record<string, boolean>>({}),
     [savedStatus, setSavedStatus] = useState('Saved on this device'),
     [historyTick, setHistoryTick] = useState(0),
-    [savedProjects, setSavedProjects] = useState<Workflow[]>([]);
+    [savedProjects, setSavedProjects] = useState<Workflow[]>(readProjects);
   const [planner, setPlanner] = useState<Planner>({
     provider: 'openai',
     model: '',
@@ -179,6 +225,7 @@ export default function App() {
       ].slice(0, 20);
       localStorage.setItem(LIBRARY, JSON.stringify(next));
       localStorage.setItem(STORAGE, JSON.stringify(current.current));
+      setSavedProjects(next);
       notify('Project saved. Open it anytime from your project library.');
     } catch (e) {
       notify('Could not save: ' + (e as Error).message);
@@ -215,6 +262,11 @@ export default function App() {
   }, [selected, edgeSelected, change]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (page === 'home') return;
+      if (page === 'new') {
+        if (e.key === 'Escape') navigate('home');
+        return;
+      }
       if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]'))
         return;
       if (e.ctrlKey || e.metaKey) {
@@ -240,7 +292,7 @@ export default function App() {
         remove();
       }
       if (e.key === 'Escape' && busy !== 'plan') {
-        setModal(null);
+        if (modal) setModal(null);
         setIntakeProject(null);
         setSelected(null);
         setEdgeSelected(null);
@@ -248,7 +300,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, save, duplicate, remove, modal, wizard, busy]);
+  }, [undo, redo, save, duplicate, remove, modal, wizard, busy, page, navigate, setModal]);
   const add = (kind: NodeKind, position?: { x: number; y: number }) => {
     const n = newBlock(
       kind,
@@ -326,8 +378,7 @@ export default function App() {
     try {
       const value = parseWorkflow(await api<Workflow>('template'));
       change(value);
-      setWizard(0);
-      setModal(null);
+      navigate('canvas');
       setSelected(null);
       notify('Example template loaded — all blocks are editable. Uses labeled sample data.');
       fit();
@@ -397,8 +448,7 @@ export default function App() {
       });
       change(parseWorkflow(value.workflow));
       setIntakeProject(null);
-      setModal(null);
-      setWizard(0);
+      navigate('canvas');
       setSelected(null);
       notify('AI draft created. Review the design notes and edit any block before export.');
       fit();
@@ -428,7 +478,7 @@ export default function App() {
       const next = parseWorkflow(JSON.parse(await file.text()));
       change(next);
       setSelected(null);
-      setWizard(0);
+      navigate('canvas');
       notify('Workflow imported. Run Check before exporting a runner.');
       fit();
     } catch (e) {
@@ -438,14 +488,31 @@ export default function App() {
     }
   };
   const openLibrary = () => {
-    try {
-      setSavedProjects(
-        (JSON.parse(localStorage.getItem(LIBRARY) || '[]') as unknown[]).map(parseWorkflow),
-      );
-    } catch {
-      setSavedProjects([]);
-    }
+    setSavedProjects(readProjects());
     setModal('saved');
+  };
+  const projects = [
+    ...(hasProject(wf) ? [wf] : []),
+    ...savedProjects.filter((project) => project.project.id !== wf.project.id),
+  ];
+  const openProject = (project: Workflow) => {
+    change(project);
+    setSelected(null);
+    setEdgeSelected(null);
+    navigate('canvas');
+    requestAnimationFrame(() => flow.setViewport(project.viewport, { duration: 250 }));
+  };
+  const startProject = (idea: string) => {
+    if (hasProject(wf)) save();
+    setDraft({ name: '', members: 3, goal: idea, deliverable: '' });
+    setWizard(1);
+  };
+  const startRequirements = (idea: string) => {
+    if (hasProject(wf)) save();
+    const next = emptyWorkflow();
+    next.project.goal = idea;
+    setIntakeProject(next);
+    setModal('planner');
   };
   const node = wf.nodes.find((n) => n.id === selected);
   const nodes: FlowNode[] = wf.nodes.map((n) => ({
@@ -480,369 +547,375 @@ export default function App() {
   }));
   void historyTick;
   return (
-    <div className="app-shell">
-      <nav className="rail" aria-label="Main navigation">
-        <button className="brand-mark" title="TeamBlocks home" onClick={openLibrary}>
-          <Blocks size={24} />
-        </button>
-        <div className="rail-middle">
-          <button
-            className="rail-button active"
-            title="Workflow canvas"
-            onClick={() => setModal(null)}
-          >
-            <LayoutGrid size={21} />
-          </button>
-          <button className="rail-button" title="Agents" onClick={() => setModal('agents')}>
-            <Bot size={21} />
-          </button>
-          <button
-            className="rail-button"
-            title="Project settings"
-            onClick={() => setModal('project')}
-          >
-            <Settings2 size={21} />
-          </button>
-          <button className="rail-button" title="Saved projects" onClick={openLibrary}>
-            <FolderOpen size={21} />
-          </button>
-        </div>
-        <button className="rail-button" title="Help & shortcuts" onClick={() => setModal('help')}>
-          <HelpCircle size={21} />
-        </button>
-        <span className="profile-avatar">Y</span>
-      </nav>
-      <div className="workspace">
-        <header className="app-header">
-          <div className="brand-word">
-            TeamBlocks<span>WORKSPACE</span>
-          </div>
-          <div className="header-right">
-            <span className={`backend-status ${online ? 'online' : ''}`}>
-              <i />
-              {online ? 'Local runner ready' : 'Backend offline'}
-            </span>
-            <span className="header-divider" />
-            <button className="text-button" onClick={() => setModal('help')}>
-              Quick guide
-              <ArrowUpRight size={14} />
+    <div className={page === 'home' ? 'home-shell' : 'app-shell studio-shell'}>
+      {page === 'home' && (
+        <Home
+          projects={projects}
+          idea={draft.goal}
+          onIdeaChange={(goal) => setDraft((value) => ({ ...value, goal }))}
+          busy={!!busy}
+          onStart={startProject}
+          onRequirements={startRequirements}
+          onExample={loadTemplate}
+          onProjects={openLibrary}
+          onOpen={openProject}
+          onHelp={() => setModal('help')}
+        />
+      )}
+      {page !== 'home' && page !== 'new' && (
+        <div className="editor-layout" inert={!!modal}>
+          <nav className="rail" aria-label="Main navigation">
+            <button className="brand-mark" title="TeamBlocks home" onClick={() => navigate('home')}>
+              <Blocks size={24} />
             </button>
-          </div>
-        </header>
-        <section className="project-bar">
-          <div>
-            <div className="breadcrumb">
-              <button onClick={openLibrary}>My projects</button>
-              <ChevronRight size={12} />
-              <span>Workflow studio</span>
-            </div>
-            <div className="project-name">
-              <h1>{wf.project.name}</h1>
+            <div className="rail-middle">
               <button
-                className="icon-button"
-                title="Edit project"
+                className="rail-button active"
+                title="Workflow canvas"
+                onClick={() => navigate('canvas')}
+              >
+                <LayoutGrid size={21} />
+              </button>
+              <button className="rail-button" title="Agents" onClick={() => setModal('agents')}>
+                <Bot size={21} />
+              </button>
+              <button
+                className="rail-button"
+                title="Project settings"
                 onClick={() => setModal('project')}
               >
-                <ChevronDown size={18} />
+                <Settings2 size={21} />
               </button>
-              <span className="draft-badge">DRAFT</span>
+              <button className="rail-button" title="Saved projects" onClick={openLibrary}>
+                <FolderOpen size={21} />
+              </button>
             </div>
-            <p className="project-caption">A little structure. A lot of possibility.</p>
-          </div>
-          <div className="project-actions">
-            <div
-              className="avatar-stack"
-              onClick={() => setModal('project')}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setModal('project')}
-              aria-label="Edit team"
+            <button
+              className="rail-button"
+              title="Help & shortcuts"
+              onClick={() => setModal('help')}
             >
-              {wf.project.members.slice(0, 4).map((m, i) => (
-                <span key={m.id} title={m.name} className={`avatar avatar-${i % 4}`}>
-                  {m.name
-                    .split(' ')
-                    .map((x) => x[0])
-                    .slice(0, 2)
-                    .join('')}
+              <HelpCircle size={21} />
+            </button>
+            <span className="profile-avatar">Y</span>
+          </nav>
+          <div className="workspace">
+            <header className="app-header">
+              <div className="brand-word">
+                <button className="workspace-home" onClick={() => navigate('home')}>
+                  <ArrowLeft size={15} /> Home
+                </button>
+                TeamBlocks
+              </div>
+              <div className="header-right">
+                <span className={`backend-status ${online ? 'online' : ''}`}>
+                  <i />
+                  {online ? 'Local runner ready' : 'Backend offline'}
                 </span>
-              ))}
-              <span className="team-count">{wf.project.members.length} members</span>
-            </div>
-            <button className="secondary" onClick={save}>
-              <Save size={15} />
-              Save
-            </button>
-            <button className="primary" disabled={!!busy} onClick={exportZip}>
-              {busy === 'export' ? (
-                <LoaderCircle className="spin" size={16} />
-              ) : (
-                <Download size={16} />
-              )}
-              Export runner
-              <ChevronDown size={14} />
-            </button>
-          </div>
-        </section>
-        <div className="studio">
-          <aside className="library">
-            <div className="panel-head">
-              <span>Building blocks</span>
-              <span className="count-badge">7</span>
-            </div>
-            <div className="library-body">
-              <p className="muted small">
-                Small blocks. Big ideas.
-                <br />
-                Drag a block onto your canvas.
-              </p>
-              <input
-                className="block-search"
-                aria-label="Find a block"
-                placeholder="Find a block…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <div className="section-label">YOUR TOOLKIT</div>
-              <div className="palette">
-                {(Object.keys(KINDS) as NodeKind[])
-                  .filter((k) => KINDS[k].name.toLowerCase().includes(search.toLowerCase()))
-                  .map((k) => {
-                    const meta = KINDS[k],
-                      Icon = icons[k];
-                    return (
-                      <button
-                        className="palette-item"
-                        key={k}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('application/teamblocks', k);
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onClick={() => add(k)}
-                        data-testid={`palette-${k}`}
-                      >
-                        <span
-                          className="palette-icon"
-                          style={{ color: meta.color, background: `${meta.color}14` }}
-                        >
-                          <Icon size={19} />
+                <span className="header-divider" />
+                <button className="text-button" onClick={() => setModal('help')}>
+                  Quick guide
+                  <ArrowUpRight size={14} />
+                </button>
+              </div>
+            </header>
+            <section className="project-bar">
+              <div>
+                <div className="breadcrumb">
+                  <button onClick={openLibrary}>My projects</button>
+                  <ChevronRight size={12} />
+                  <span>Workflow studio</span>
+                </div>
+                <div className="project-name">
+                  <h1>{wf.project.name}</h1>
+                  <button
+                    className="icon-button"
+                    title="Edit project"
+                    onClick={() => setModal('project')}
+                  >
+                    <ChevronDown size={18} />
+                  </button>
+                  <span className="draft-badge">DRAFT</span>
+                </div>
+              </div>
+              <div className="project-actions">
+                <div
+                  className="avatar-stack"
+                  onClick={() => setModal('project')}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && setModal('project')}
+                  aria-label="Edit team"
+                >
+                  {wf.project.members.slice(0, 4).map((m, i) => (
+                    <span key={m.id} title={m.name} className={`avatar avatar-${i % 4}`}>
+                      {m.name
+                        .split(' ')
+                        .map((x) => x[0])
+                        .slice(0, 2)
+                        .join('')}
+                    </span>
+                  ))}
+                  <span className="team-count">{wf.project.members.length} members</span>
+                </div>
+                <button className="secondary" onClick={save}>
+                  <Save size={15} />
+                  Save
+                </button>
+                <button className="primary" disabled={!!busy} onClick={exportZip}>
+                  {busy === 'export' ? (
+                    <LoaderCircle className="spin" size={16} />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  Export runner
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+            </section>
+            <div className="studio">
+              <aside className="library">
+                <div className="panel-head">
+                  <span>Building blocks</span>
+                  <span className="count-badge">7</span>
+                </div>
+                <div className="library-body">
+                  <input
+                    className="block-search"
+                    aria-label="Find a block"
+                    placeholder="Find a block…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="section-label">YOUR TOOLKIT</div>
+                  <div className="palette">
+                    {(Object.keys(KINDS) as NodeKind[])
+                      .filter((k) => KINDS[k].name.toLowerCase().includes(search.toLowerCase()))
+                      .map((k) => {
+                        const meta = KINDS[k],
+                          Icon = icons[k];
+                        return (
+                          <button
+                            className="palette-item"
+                            aria-label={meta.name}
+                            title={meta.description}
+                            key={k}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('application/teamblocks', k);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onClick={() => add(k)}
+                            data-testid={`palette-${k}`}
+                          >
+                            <span
+                              className="palette-icon"
+                              style={{ color: meta.color, background: `${meta.color}14` }}
+                            >
+                              <Icon size={19} />
+                            </span>
+                            <span>
+                              <strong>{meta.name}</strong>
+                              <small>{meta.description}</small>
+                            </span>
+                            <GripVertical size={15} className="grip" />
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+                <div className="library-footer">
+                  <button onClick={() => fileInput.current?.click()}>
+                    <Upload size={14} />
+                    Import JSON
+                  </button>
+                  <button onClick={jsonExport}>
+                    <FileJson size={14} />
+                    Export JSON
+                  </button>
+                </div>
+              </aside>
+              <main className="canvas-section">
+                <div className="canvas-toolbar">
+                  <div className="canvas-tabs">
+                    <button className="active">
+                      <MousePointer2 size={15} />
+                      Canvas
+                    </button>
+                    <button onClick={() => setModal('agents')}>
+                      <Bot size={15} />
+                      Agents<span>{wf.agents.length}</span>
+                    </button>
+                  </div>
+                  <div className="canvas-tools">
+                    <button
+                      className="icon-button"
+                      disabled={!past.current.length}
+                      onClick={undo}
+                      title="Undo (Ctrl+Z)"
+                    >
+                      <Undo2 size={16} />
+                    </button>
+                    <button
+                      className="icon-button"
+                      disabled={!future.current.length}
+                      onClick={redo}
+                      title="Redo (Ctrl+Shift+Z)"
+                    >
+                      <Redo2 size={16} />
+                    </button>
+                    <span className="toolbar-divider" />
+                    <button className="toolbar-button" onClick={() => setModal('planner')}>
+                      <Sparkles size={15} />
+                      AI designer
+                    </button>
+                    <button className="toolbar-button check-button" onClick={check}>
+                      <CheckCircle2 size={15} />
+                      Check
+                    </button>
+                  </div>
+                </div>
+                <div
+                  className="flow-wrap"
+                  data-testid="workflow-canvas"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const kind = e.dataTransfer.getData('application/teamblocks') as NodeKind;
+                    if (KINDS[kind])
+                      add(kind, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+                  }}
+                >
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={nodeTypes}
+                    onNodesChange={onNodesChange}
+                    onNodeDragStart={remember}
+                    onNodeClick={(_, n) => {
+                      setSelected(n.id);
+                      setEdgeSelected(null);
+                    }}
+                    onPaneClick={() => {
+                      setSelected(null);
+                      setEdgeSelected(null);
+                    }}
+                    onEdgeClick={(_, e) => {
+                      setEdgeSelected(e.id);
+                      setSelected(null);
+                    }}
+                    onConnect={connect}
+                    onReconnect={(old, next) => connect(next, old.id)}
+                    onMoveEnd={(_, viewport) => setWf((w) => ({ ...w, viewport }))}
+                    defaultViewport={wf.viewport}
+                    snapToGrid
+                    snapGrid={[16, 16]}
+                    minZoom={0.2}
+                    maxZoom={1.75}
+                    deleteKeyCode={null}
+                    connectionRadius={28}
+                    proOptions={{ hideAttribution: false }}
+                  >
+                    <Background
+                      variant={BackgroundVariant.Dots}
+                      color="#c4cbbd"
+                      gap={22}
+                      size={1}
+                    />
+                    <Controls showInteractive={false} />
+                    <MiniMap
+                      nodeColor={(n) => KINDS[(n.data.block as Block).type].color}
+                      maskColor="#f4f6f0bb"
+                      pannable
+                      zoomable
+                    />
+                  </ReactFlow>
+                  {!wf.nodes.length && (
+                    <div className="canvas-empty">
+                      <div className="empty-blocks">
+                        <span>
+                          <Blocks size={32} />
                         </span>
                         <span>
-                          <strong>{meta.name}</strong>
-                          <small>{meta.description}</small>
+                          <Plus size={24} />
                         </span>
-                        <GripVertical size={15} className="grip" />
+                      </div>
+                      <h2>Make room for your next big idea.</h2>
+                      <p>
+                        Drag your first block here, or get a head start
+                        <br />
+                        with an example workflow.
+                      </p>
+                      <button className="secondary" onClick={() => add('start')}>
+                        <Plus size={16} />
+                        Add a Start block
                       </button>
-                    );
-                  })}
-              </div>
-              <div className="library-tip">
-                <span className="tip-spark">✧</span>
-                <strong>Start with a little inspiration.</strong>
-                <p>Explore a complete, editable workflow for a three-person team.</p>
-                <button onClick={loadTemplate} disabled={!!busy}>
-                  Load example template
-                  <ArrowRight size={14} />
-                </button>
-                <span className="template-label">TEMPLATE · NO AI CALL</span>
-              </div>
-            </div>
-            <div className="library-footer">
-              <button onClick={() => fileInput.current?.click()}>
-                <Upload size={14} />
-                Import JSON
-              </button>
-              <button onClick={jsonExport}>
-                <FileJson size={14} />
-                Export JSON
-              </button>
-            </div>
-          </aside>
-          <main className="canvas-section">
-            <div className="canvas-toolbar">
-              <div className="canvas-tabs">
-                <button className="active">
-                  <MousePointer2 size={15} />
-                  Canvas
-                </button>
-                <button onClick={() => setModal('agents')}>
-                  <Bot size={15} />
-                  Agents<span>{wf.agents.length}</span>
-                </button>
-              </div>
-              <div className="canvas-tools">
-                <button
-                  className="icon-button"
-                  disabled={!past.current.length}
-                  onClick={undo}
-                  title="Undo (Ctrl+Z)"
-                >
-                  <Undo2 size={16} />
-                </button>
-                <button
-                  className="icon-button"
-                  disabled={!future.current.length}
-                  onClick={redo}
-                  title="Redo (Ctrl+Shift+Z)"
-                >
-                  <Redo2 size={16} />
-                </button>
-                <span className="toolbar-divider" />
-                <button className="toolbar-button" onClick={() => setModal('planner')}>
-                  <Sparkles size={15} />
-                  AI designer
-                </button>
-                <button className="toolbar-button check-button" onClick={check}>
-                  <CheckCircle2 size={15} />
-                  Check
-                </button>
-              </div>
-            </div>
-            <div
-              className="flow-wrap"
-              data-testid="workflow-canvas"
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const kind = e.dataTransfer.getData('application/teamblocks') as NodeKind;
-                if (KINDS[kind])
-                  add(kind, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
-              }}
-            >
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={nodeTypes}
-                onNodesChange={onNodesChange}
-                onNodeDragStart={remember}
-                onNodeClick={(_, n) => {
-                  setSelected(n.id);
-                  setEdgeSelected(null);
-                }}
-                onPaneClick={() => {
-                  setSelected(null);
-                  setEdgeSelected(null);
-                }}
-                onEdgeClick={(_, e) => {
-                  setEdgeSelected(e.id);
-                  setSelected(null);
-                }}
-                onConnect={connect}
-                onReconnect={(old, next) => connect(next, old.id)}
-                onMoveEnd={(_, viewport) => setWf((w) => ({ ...w, viewport }))}
-                defaultViewport={wf.viewport}
-                snapToGrid
-                snapGrid={[16, 16]}
-                minZoom={0.2}
-                maxZoom={1.75}
-                deleteKeyCode={null}
-                connectionRadius={28}
-                proOptions={{ hideAttribution: false }}
-              >
-                <Background variant={BackgroundVariant.Dots} color="#c4cbbd" gap={22} size={1} />
-                <Controls showInteractive={false} />
-                <MiniMap
-                  nodeColor={(n) => KINDS[(n.data.block as Block).type].color}
-                  maskColor="#f4f6f0bb"
-                  pannable
-                  zoomable
-                />
-              </ReactFlow>
-              {!wf.nodes.length && (
-                <div className="canvas-empty">
-                  <div className="empty-blocks">
-                    <span>
-                      <Blocks size={32} />
-                    </span>
-                    <span>
-                      <Plus size={24} />
+                      <button className="text-button" onClick={loadTemplate}>
+                        Explore the example
+                        <ArrowRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                  {edgeSelected && (
+                    <div className="edge-popover">
+                      <Cable size={16} />
+                      <span>
+                        {wf.edges.find((e) => e.id === edgeSelected)?.kind === 'data'
+                          ? 'Data access'
+                          : 'Execution dependency'}
+                      </span>
+                      <button
+                        className="icon-button danger"
+                        title="Delete connection"
+                        onClick={remove}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="canvas-status">
+                  <span>
+                    <Check size={13} />
+                    {savedStatus}
+                  </span>
+                  <div>
+                    <span>{wf.nodes.length} blocks</span>
+                    <span>{wf.edges.length} connections</span>
+                    <button
+                      className={showData ? 'data-toggle active' : 'data-toggle'}
+                      onClick={() => setShowData(!showData)}
+                    >
+                      <i />
+                      Data links
+                    </button>
+                    <span className="execution-legend">
+                      <i />
+                      Execution
                     </span>
                   </div>
-                  <h2>Make room for your next big idea.</h2>
-                  <p>
-                    Drag your first block here, or get a head start
-                    <br />
-                    with an example workflow.
-                  </p>
-                  <button className="secondary" onClick={() => add('start')}>
-                    <Plus size={16} />
-                    Add a Start block
-                  </button>
-                  <button className="text-button" onClick={loadTemplate}>
-                    Explore the example
-                    <ArrowRight size={14} />
-                  </button>
                 </div>
+              </main>
+              {node && (
+                <Inspector
+                  node={node}
+                  wf={wf}
+                  onChange={(next) =>
+                    change({ ...wf, nodes: wf.nodes.map((n) => (n.id === next.id ? next : n)) })
+                  }
+                  onClose={() => setSelected(null)}
+                  onDuplicate={duplicate}
+                  onDelete={remove}
+                  onAgents={() => setModal('agents')}
+                />
               )}
-              {edgeSelected && (
-                <div className="edge-popover">
-                  <Cable size={16} />
-                  <span>
-                    {wf.edges.find((e) => e.id === edgeSelected)?.kind === 'data'
-                      ? 'Data access'
-                      : 'Execution dependency'}
-                  </span>
-                  <button className="icon-button danger" title="Delete connection" onClick={remove}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              )}
-              <div className="canvas-caption">
-                <span className="live-dot" />
-                YOUR IDEAS, CONNECTED
-              </div>
             </div>
-            <div className="canvas-status">
-              <span>
-                <Check size={13} />
-                {savedStatus}
-              </span>
-              <div>
-                <span>{wf.nodes.length} blocks</span>
-                <span>{wf.edges.length} connections</span>
-                <button
-                  className={showData ? 'data-toggle active' : 'data-toggle'}
-                  onClick={() => setShowData(!showData)}
-                >
-                  <i />
-                  Data links
-                </button>
-                <span className="execution-legend">
-                  <i />
-                  Execution
-                </span>
-              </div>
-            </div>
-          </main>
-          {node && (
-            <Inspector
-              node={node}
-              wf={wf}
-              onChange={(next) =>
-                change({ ...wf, nodes: wf.nodes.map((n) => (n.id === next.id ? next : n)) })
-              }
-              onClose={() => setSelected(null)}
-              onDuplicate={duplicate}
-              onDelete={remove}
-              onAgents={() => setModal('agents')}
-            />
-          )}
+          </div>
         </div>
-        <footer className="app-footer">
-          <span>Built for teams. Designed by you.</span>
-          <span>
-            <ShieldCheckIcon />
-            Credentials stay in your local environment.
-          </span>
-          <button onClick={() => setModal('help')}>
-            Keyboard shortcuts <kbd>?</kbd>
-          </button>
-        </footer>
-      </div>
+      )}
       <input
         ref={fileInput}
         type="file"
@@ -861,54 +934,27 @@ export default function App() {
       )}
       {wizard > 0 && (
         <div className="modal-backdrop">
-          <section className="onboarding">
-            <div className="onboarding-art">
-              <span className="onboarding-brand">
-                <Blocks size={23} />
-                TeamBlocks
+          <section className="onboarding" role="dialog" aria-modal="true" aria-label="New project">
+            <div className="setup-header">
+              <button className="text-button" onClick={() => navigate('home')}>
+                <ArrowLeft size={16} /> Home
+              </button>
+              <span className="home-brand">
+                <Blocks size={20} /> TeamBlocks
               </span>
-              <span className="eyebrow">BETTER WORK, TOGETHER</span>
-              <h2>
-                Big ideas.
-                <br />
-                Small blocks.
-                <br />
-                <em>Your team.</em>
-              </h2>
-              <p>
-                Give every idea a path, every agent a purpose, and every teammate a part to play.
-              </p>
-              <div className="mini-workflow">
-                <span>
-                  <Users size={18} />
-                  Your team
-                </span>
-                <i />
-                <span>
-                  <Bot size={18} />
-                  AI agents
-                </span>
-                <i />
-                <span>
-                  <CheckCheck size={18} />
-                  Great work
-                </span>
-              </div>
-              <div className="onboarding-foot">DESIGN IT. CONNECT IT. TAKE IT WITH YOU.</div>
             </div>
             <div className="onboarding-form">
               {wizard === 1 ? (
                 <>
-                  <span className="eyebrow">LET’S BUILD SOMETHING</span>
-                  <h2>A home for your next project.</h2>
-                  <p className="muted">
-                    Bring your requirement document, or describe the project yourself.
-                  </p>
+                  <span className="eyebrow">NEW PROJECT</span>
+                  <h2>A few details, then you’re off.</h2>
+                  <p className="muted">Give your project a name and a direction.</p>
                   <button
                     className="start-choice ai requirement-start"
                     onClick={() => {
                       const next = emptyWorkflow();
                       next.project.name = draft.name.trim() || 'Untitled project';
+                      next.project.goal = draft.goal;
                       next.project.members = Array.from(
                         { length: Math.min(50, Math.max(1, draft.members || 3)) },
                         (_, i) => ({
@@ -918,7 +964,6 @@ export default function App() {
                         }),
                       );
                       setIntakeProject(next);
-                      setWizard(0);
                       setModal('planner');
                     }}
                   >
@@ -935,10 +980,14 @@ export default function App() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
+                      if (!draft.name.trim()) {
+                        notify('Enter a project name.');
+                        return;
+                      }
                       const next = emptyWorkflow();
                       next.project = {
                         ...next.project,
-                        name: draft.name,
+                        name: draft.name.trim(),
                         goal: draft.goal,
                         deliverable: draft.deliverable,
                         members: Array.from({ length: draft.members }, (_, i) => ({
@@ -998,17 +1047,6 @@ export default function App() {
                       <ArrowRight size={16} />
                     </button>
                   </form>
-                  <div className="onboarding-or">JUST EXPLORING?</div>
-                  <button className="text-button centered" disabled={!!busy} onClick={loadTemplate}>
-                    Try the three-person example template
-                    <ArrowUpRight size={15} />
-                  </button>
-                  <button
-                    className="text-button centered"
-                    onClick={() => fileInput.current?.click()}
-                  >
-                    Open a workflow JSON
-                  </button>
                 </>
               ) : (
                 <>
@@ -1040,7 +1078,6 @@ export default function App() {
                   <button
                     className="start-choice ai"
                     onClick={() => {
-                      setWizard(0);
                       setModal('planner');
                     }}
                   >
@@ -1101,7 +1138,7 @@ export default function App() {
                 </h2>
               </div>
               <button
-                className="icon-button"
+                className="secondary page-back"
                 title="Close dialog"
                 disabled={busy === 'plan'}
                 onClick={() => {
@@ -1109,7 +1146,7 @@ export default function App() {
                   setIntakeProject(null);
                 }}
               >
-                <X size={20} />
+                <ArrowLeft size={16} /> Back
               </button>
             </div>
             <div className="modal-body">
@@ -1219,24 +1256,19 @@ export default function App() {
                   <button
                     className="secondary"
                     onClick={() => {
-                      save();
-                      setModal(null);
-                      setWizard(1);
+                      startProject('');
                     }}
                   >
                     <Plus size={17} />
                     Create a new project
                   </button>
-                  {savedProjects.length ? (
-                    savedProjects.map((p) => (
+                  {projects.length ? (
+                    projects.map((p) => (
                       <button
                         className="saved-project"
                         key={p.project.id}
                         onClick={() => {
-                          change(p);
-                          setModal(null);
-                          setSelected(null);
-                          flow.setViewport(p.viewport, { duration: 250 });
+                          openProject(p);
                         }}
                       >
                         <span className="project-folder">
@@ -1370,7 +1402,4 @@ export default function App() {
       )}
     </div>
   );
-}
-function ShieldCheckIcon() {
-  return <CheckCircle2 size={12} />;
 }

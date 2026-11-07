@@ -48,6 +48,16 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
 }) => {
   await page.goto('/');
   await page.screenshot({ path: resolve(artifactDir, 'onboarding.png'), fullPage: true });
+  await expect(page.getByTestId('home-page')).toBeVisible();
+  await expect(page.getByTestId('workflow-canvas')).toHaveCount(0);
+  await page
+    .getByLabel('Describe your project')
+    .fill('Write a concise report from the assigned task.');
+  await page.getByRole('button', { name: 'Continue to project setup' }).click();
+  await expect(page).toHaveURL(/#\/new$/);
+  await expect(page.getByLabel('What are you working on?')).toHaveValue(
+    'Write a concise report from the assigned task.',
+  );
   await page.getByLabel('Project name', { exact: true }).fill('Manual canvas test');
   await page.getByLabel('Team size', { exact: true }).fill('3');
   await page.getByLabel('Final deliverable', { exact: true }).fill('A Markdown report');
@@ -76,7 +86,7 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'New agent', exact: true }).click();
   await page.getByLabel('Name', { exact: true }).fill('Writer');
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.getByTestId(`block-${task.id}`).click();
   await page.getByLabel('Agent', { exact: true }).selectOption({ label: 'Writer' });
   await page.getByLabel('Task instructions').fill('Write a report about our demo workflow.');
@@ -91,7 +101,7 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
   await closeInspector(page);
   await page.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(page.getByText('Ready for a mock run.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export runner' }).click();
   const bundle = await downloadEvent;
@@ -236,7 +246,7 @@ test('AI is honest when credentials are absent; task model and planner are separ
   await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
   await expect(page.getByRole('status')).toContainText(/credential|key|configure|未配置|凭证/i);
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   expect((await getWorkflow(page)).agents.every((a: any) => a.model === '')).toBe(true);
 });
 

@@ -129,6 +129,7 @@ test('upload actual PDF from onboarding, review tasks and preserve requirements 
 }) => {
   const requests = await modelFixtures(page);
   await page.goto('/');
+  await page.getByRole('button', { name: 'Continue to project setup' }).click();
   await page.getByLabel('Project name', { exact: true }).fill('Document-led project');
   await page.getByLabel('Team size', { exact: true }).fill('3');
   // No manually entered goal or deliverable is needed for this entry point.
@@ -237,7 +238,7 @@ test('closing after extraction leaves the existing workflow and resources unchan
   await expect(page.getByLabel('Extracted requirement text', { exact: true })).toHaveValue(
     new RegExp(requirementText),
   );
-  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   const cancelled = await getWorkflow(page);
   // Initial template fitting can still animate the viewport after the first
   // export. Compare every project/graph field, including node positions.
