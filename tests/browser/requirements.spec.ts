@@ -129,6 +129,7 @@ test('upload actual PDF from onboarding, review tasks and preserve requirements 
 }) => {
   const requests = await modelFixtures(page);
   await page.goto('/');
+  await page.getByRole('button', { name: 'Continue to project setup' }).click();
   await page.getByLabel('Project name', { exact: true }).fill('Document-led project');
   await page.getByLabel('Team size', { exact: true }).fill('3');
   // No manually entered goal or deliverable is needed for this entry point.
@@ -237,13 +238,76 @@ test('closing after extraction leaves the existing workflow and resources unchan
   await expect(page.getByLabel('Extracted requirement text', { exact: true })).toHaveValue(
     new RegExp(requirementText),
   );
-  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   const cancelled = await getWorkflow(page);
   // Initial template fitting can still animate the viewport after the first
   // export. Compare every project/graph field, including node positions.
   expect({ ...cancelled, viewport: original.viewport }).toEqual(original);
   expect(requests.analysisRequests).toHaveLength(0);
   expect(requests.planRequests).toHaveLength(0);
+});
+
+test('browser Back cancels a new requirements draft before editing an existing project', async ({
+  page,
+}) => {
+  const requests = await modelFixtures(page);
+  await openTemplate(page);
+  const original = await getWorkflow(page);
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload project requirements', exact: true }).click();
+  await expect(page.getByTestId('requirements-file-input')).toBeAttached();
+  await page.goBack();
+  await expect(page.getByTestId('home-page')).toBeVisible();
+  await page.locator('.recent-project').filter({ hasText: original.project.name }).click();
+  await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+  await uploadPdf(page);
+  await expect(page.getByLabel('Extracted requirement text', { exact: true })).toHaveValue(
+    new RegExp(requirementText),
+  );
+  await analyze(page);
+  await page
+    .getByRole('button', { name: 'Generate workflow from requirements', exact: true })
+    .click();
+  await expect(page.getByText('Requirement-based comparison', { exact: true })).toBeVisible();
+  expect(requests.planRequests).toHaveLength(1);
+  const generated = await getWorkflow(page);
+  for (const result of [requests.planRequests[0], generated]) {
+    expect(result.project.id).toBe(original.project.id);
+    expect(result.project.name).toBe(original.project.name);
+    expect(result.project.members).toEqual(original.project.members);
+    expect(result.resources).toEqual(expect.arrayContaining(original.resources));
+    expect(
+      result.resources.filter((resource: any) => resource.id.startsWith('requirements-')),
+    ).toHaveLength(2);
+  }
+});
+
+test('home Add requirements creates a new project directly from the reviewed document', async ({
+  page,
+}) => {
+  const requests = await modelFixtures(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Upload project requirements', exact: true }).click();
+  await uploadPdf(page);
+  await expect(page.getByLabel('Extracted requirement text', { exact: true })).toHaveValue(
+    new RegExp(requirementText),
+  );
+  await analyze(page);
+  await page
+    .getByRole('button', { name: 'Generate workflow from requirements', exact: true })
+    .click();
+  await expect(page).toHaveURL(/#\/workspace$/);
+  await expect(page.getByText('Requirement-based comparison', { exact: true })).toBeVisible();
+  expect(requests.analysisRequests).toHaveLength(1);
+  expect(requests.planRequests).toHaveLength(1);
+  const generated = await getWorkflow(page);
+  expect(generated.project.name).toBe(analysisFixture.project_name);
+  expect(generated.project.goal).toContain(analysisFixture.tasks[0].title);
+  expect(generated.project.members).toHaveLength(3);
+  expect(generated.resources).toHaveLength(2);
+  expect(
+    generated.resources.some((resource: any) => resource.content.includes(requirementText)),
+  ).toBe(true);
 });
 
 test('editing extracted text invalidates old tasks and sends the reviewed text on reanalysis', async ({

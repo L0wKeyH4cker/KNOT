@@ -55,7 +55,7 @@ PUBLIC_ERROR_MESSAGES = {
 
 def _error_category(status, code, error_type):
     tokens = {code, error_type}
-    if tokens & {"insufficient_quota", "billing_hard_limit_reached", "spend_limit_reached", "usage_limit_reached"}:
+    if status == 402 or tokens & {"insufficient_quota", "billing_hard_limit_reached", "spend_limit_reached", "usage_limit_reached"}:
         return "quota"
     if tokens & {"rate_limit_exceeded", "rate_limit_error"}:
         return "rate_limit"

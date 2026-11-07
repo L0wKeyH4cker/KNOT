@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import {
-  Plus,
-  Trash2,
-  Bot,
-  ShieldCheck,
-  Users,
-  FolderOpen,
-  ArrowUpRight,
-  KeyRound,
-} from 'lucide-react';
+import { Plus, Trash2, Bot, ShieldCheck, Users, FolderOpen, ArrowUpRight } from 'lucide-react';
+import ConnectionSettings from './ConnectionSettings';
 import { Field, CheckList } from './Inspector';
 import { newAgent, TOOLS, uid } from './model';
 import type { Workflow, Agent, Resource } from './model';
-export function AgentsSettings({ wf, change }: { wf: Workflow; change: (w: Workflow) => void }) {
+export function AgentsSettings({
+  wf,
+  change,
+  credentials,
+  onCredentialsChange,
+}: {
+  wf: Workflow;
+  change: (w: Workflow) => void;
+  credentials: Record<string, boolean>;
+  onCredentialsChange: (credentials: Record<string, boolean>) => void;
+}) {
   const [active, setActive] = useState(wf.agents[0]?.id || '');
   const a = wf.agents.find((a) => a.id === active);
   const update = (patch: Partial<Agent>) =>
@@ -84,56 +86,13 @@ export function AgentsSettings({ wf, change }: { wf: Workflow; change: (w: Workf
                 onChange={(e) => update({ system_prompt: e.target.value })}
               />
             </Field>
-            <div className="form-grid">
-              <Field label="Provider">
-                <select
-                  value={a.provider}
-                  onChange={(e) =>
-                    update({
-                      provider: e.target.value as Agent['provider'],
-                      model: '',
-                      credential_ref:
-                        e.target.value === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY',
-                      base_url: '',
-                    })
-                  }
-                >
-                  <option value="openai">OpenAI-compatible</option>
-                  <option value="anthropic">Anthropic</option>
-                </select>
-              </Field>
-              <Field
-                label="Model name"
-                hint="Use the exact API model ID from your provider, not the display name."
-              >
-                <input
-                  value={a.model}
-                  placeholder="Enter your provider's model ID"
-                  onChange={(e) => update({ model: e.target.value })}
-                />
-              </Field>
-            </div>
-            <Field
-              label="Credential reference"
-              hint="Environment variable name only. Never paste an API key here."
-            >
-              <input
-                value={a.credential_ref}
-                pattern="[A-Z][A-Z0-9_]*"
-                onChange={(e) => update({ credential_ref: e.target.value })}
-              />
-            </Field>
-            <Field label="API base URL (optional)">
-              <input
-                value={a.base_url || ''}
-                placeholder={
-                  a.provider === 'openai'
-                    ? 'https://api.openai.com/v1'
-                    : 'https://api.anthropic.com/v1'
-                }
-                onChange={(e) => update({ base_url: e.target.value })}
-              />
-            </Field>
+            <ConnectionSettings
+              key={a.id}
+              connection={a}
+              onChange={update}
+              credentials={credentials}
+              onCredentialsChange={onCredentialsChange}
+            />
             <Field label="Allowed tools">
               <CheckList
                 values={TOOLS}
@@ -379,6 +338,7 @@ export function PlannerSettings({
   planner,
   setPlanner,
   credentials,
+  onCredentialsChange,
   busy,
   generate,
   hasNodes,
@@ -387,6 +347,7 @@ export function PlannerSettings({
   planner: Planner;
   setPlanner: (p: Planner) => void;
   credentials: Record<string, boolean>;
+  onCredentialsChange: (credentials: Record<string, boolean>) => void;
   busy: boolean;
   generate: () => void;
   hasNodes: boolean;
@@ -404,65 +365,14 @@ export function PlannerSettings({
           </p>
         </div>
       )}
-      <div className="form-grid">
-        <Field label="Planning provider">
-          <select
-            value={planner.provider}
-            onChange={(e) =>
-              setPlanner({
-                ...planner,
-                provider: e.target.value as Planner['provider'],
-                model: '',
-                credential_ref:
-                  e.target.value === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY',
-                base_url: '',
-              })
-            }
-          >
-            <option value="openai">OpenAI-compatible</option>
-            <option value="anthropic">Anthropic</option>
-          </select>
-        </Field>
-        <Field
-          label="Planning model"
-          hint={
-            planner.provider === 'openai'
-              ? 'Use the API ID, e.g. gpt-6-luna. Display names such as GPT-6 Luna are not API IDs.'
-              : 'Use the exact API model ID from your provider, not the display name.'
-          }
-        >
-          <input
-            placeholder="Your model ID"
-            value={planner.model}
-            onChange={(e) => setPlanner({ ...planner, model: e.target.value })}
-          />
-        </Field>
-      </div>
-      <Field
-        label="Credential environment variable"
-        hint="Set this on the local backend. Keys are never entered or stored in the browser."
-      >
-        <input
-          placeholder="OPENAI_API_KEY"
-          value={planner.credential_ref}
-          onChange={(e) => setPlanner({ ...planner, credential_ref: e.target.value })}
-        />
-      </Field>
-      <Field label="API base URL (optional)">
-        <input
-          value={planner.base_url}
-          onChange={(e) => setPlanner({ ...planner, base_url: e.target.value })}
-          placeholder="Default provider endpoint"
-        />
-      </Field>
-      <div className={`credential-status ${credentials[planner.credential_ref] ? 'ready' : ''}`}>
-        <KeyRound size={16} />
-        {credentials[planner.credential_ref] === true
-          ? 'Credential detected on local backend'
-          : credentials[planner.credential_ref] === false
-            ? 'No credential detected. Real AI generation is unavailable until configured.'
-            : 'Credential status not checked for this reference. The backend will check it when you run analysis or generation.'}
-      </div>
+      <ConnectionSettings
+        planning
+        connection={planner}
+        onChange={setPlanner}
+        credentials={credentials}
+        onCredentialsChange={onCredentialsChange}
+        disabled={busy}
+      />
       {!configurationOnly && (
         <>
           <p className="muted small">

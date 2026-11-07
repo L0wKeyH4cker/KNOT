@@ -48,6 +48,16 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
 }) => {
   await page.goto('/');
   await page.screenshot({ path: resolve(artifactDir, 'onboarding.png'), fullPage: true });
+  await expect(page.getByTestId('home-page')).toBeVisible();
+  await expect(page.getByTestId('workflow-canvas')).toHaveCount(0);
+  await page
+    .getByLabel('Describe your project')
+    .fill('Write a concise report from the assigned task.');
+  await page.getByRole('button', { name: 'Continue to project setup' }).click();
+  await expect(page).toHaveURL(/#\/new$/);
+  await expect(page.getByLabel('What are you working on?')).toHaveValue(
+    'Write a concise report from the assigned task.',
+  );
   await page.getByLabel('Project name', { exact: true }).fill('Manual canvas test');
   await page.getByLabel('Team size', { exact: true }).fill('3');
   await page.getByLabel('Final deliverable', { exact: true }).fill('A Markdown report');
@@ -76,7 +86,7 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'New agent', exact: true }).click();
   await page.getByLabel('Name', { exact: true }).fill('Writer');
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.getByTestId(`block-${task.id}`).click();
   await page.getByLabel('Agent', { exact: true }).selectOption({ label: 'Writer' });
   await page.getByLabel('Task instructions').fill('Write a report about our demo workflow.');
@@ -91,7 +101,7 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
   await closeInspector(page);
   await page.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(page.getByText('Ready for a mock run.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export runner' }).click();
   const bundle = await downloadEvent;
@@ -151,6 +161,69 @@ test('example blocks move freely, connections follow, undo/redo, duplicate/delet
   );
   await page.screenshot({ path: resolve(artifactDir, 'canvas-desktop.png'), fullPage: true });
 });
+
+for (const prefix of ['knot', 'teamblocks']) {
+  test(`new home opens ${prefix} saved projects and preserves the separate planner connection`, async ({
+    page,
+  }) => {
+    const current = JSON.parse(readFileSync(resolve('examples/team-research.json'), 'utf8'));
+    current.project.name = 'Saved current project';
+    current.agents[0].model = 'saved-execution-model';
+    const library = structuredClone(current);
+    library.project.id = 'saved-library-project';
+    library.project.name = 'Saved library project';
+    library.nodes.find((node: any) => node.id === 'research').label = 'Preserved library task';
+    const planner = {
+      provider: 'openai',
+      model: 'saved-planning-model',
+      credential_ref: 'SAVED_PLANNER_API_KEY',
+      base_url: 'https://saved-planner.example.invalid/v1',
+    };
+    await page.addInitScript(
+      ({ prefix, current, library, planner }) => {
+        if (sessionStorage.getItem('fixture-projects-seeded')) return;
+        localStorage.setItem(`${prefix}.current.v1`, JSON.stringify(current));
+        localStorage.setItem(`${prefix}.projects.v1`, JSON.stringify([library]));
+        localStorage.setItem(`${prefix}.planner.v1`, JSON.stringify(planner));
+        sessionStorage.setItem('fixture-projects-seeded', 'true');
+      },
+      { prefix, current, library, planner },
+    );
+    await page.goto('/');
+    await expect(page).toHaveTitle(/^KNOT/);
+    await expect(page.getByRole('link', { name: 'KNOT home', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Saved current project/ }).click();
+    await expect(page).toHaveURL(/#\/workspace$/);
+    const restored = await getWorkflow(page);
+    expect(restored.project).toEqual(current.project);
+    expect(restored.agents).toEqual(current.agents);
+    expect(restored.nodes).toEqual(current.nodes);
+    expect(restored.edges).toEqual(current.edges);
+    await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+    await expect(page.getByLabel('Planning model', { exact: true })).toHaveValue(planner.model);
+    await expect(page.getByLabel('Credential environment variable', { exact: true })).toHaveValue(
+      planner.credential_ref,
+    );
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
+    await page.getByRole('button', { name: 'My projects', exact: true }).click();
+    await page.getByRole('button', { name: /Saved library project/ }).click();
+    await expect(page.getByText('Preserved library task', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.reload();
+    expect((await getWorkflow(page)).nodes).toEqual(library.nodes);
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('knot.planner.v1') || 'null')),
+    ).toEqual(planner);
+    if (prefix === 'teamblocks') {
+      expect(
+        await page.evaluate(() =>
+          JSON.parse(localStorage.getItem('teamblocks.current.v1') || 'null'),
+        ),
+      ).toEqual(current);
+    }
+  });
+}
 
 test('real port dragging rejects cycles, deletes and reconnects edges, and checks missing inputs', async ({
   page,
@@ -226,19 +299,16 @@ test('AI is honest when credentials are absent; task model and planner are separ
 }) => {
   await openTemplate(page);
   await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+  await page.getByText('Advanced connection settings', { exact: true }).click();
   await page
     .getByLabel('Credential environment variable', { exact: true })
     .fill('KNOT_TEST_MISSING_KEY');
-  await expect(
-    page.getByText(
-      'Credential status not checked for this reference. The backend will check it when you run analysis or generation.',
-    ),
-  ).toBeVisible();
+  await expect(page.locator('.key-state')).toHaveText('Credential status not checked');
   await page.getByLabel('Planning model', { exact: true }).fill('user-configured-model');
   await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
   await expect(page.getByRole('status')).toContainText(/credential|key|configure|未配置|凭证/i);
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   expect((await getWorkflow(page)).agents.every((a: any) => a.model === '')).toBe(true);
 });
 
@@ -255,6 +325,49 @@ test('template exports from browser and keeps review before delivery; no browser
   await (await d).saveAs(resolve(artifactDir, 'template-runner.zip'));
   await expect(page.getByText('Take your team’s workflow with you.')).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('DeepSeek setup saves credentials separately and tests the selected compatible connection (API fixtures)', async ({
+  page,
+}) => {
+  const fixtureKey = 'browser-connection-fixture-only';
+  await page.route('**/api/health', (route) =>
+    route.fulfill({ json: { ok: true, planner_credentials: { DEEPSEEK_API_KEY: false } } }),
+  );
+  await page.route('**/api/credentials', async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      credential_ref: 'DEEPSEEK_API_KEY',
+      key: fixtureKey,
+    });
+    await route.fulfill({ json: { credentials: { DEEPSEEK_API_KEY: true } } });
+  });
+  await page.route('**/api/connection/test', async (route) => {
+    expect(route.request().postDataJSON().connection).toEqual({
+      provider: 'openai',
+      model: 'deepseek-flash',
+      credential_ref: 'DEEPSEEK_API_KEY',
+      base_url: 'https://api.deepseek.com',
+    });
+    await route.fulfill({ json: { ok: true, message: 'Connection verified by test fixture.' } });
+  });
+  await openTemplate(page);
+  await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+  await page.getByLabel('Planning provider', { exact: true }).selectOption('deepseek');
+  await expect(page.getByLabel('Planning model', { exact: true })).toHaveValue('deepseek-flash');
+  await page.getByLabel('API key', { exact: true }).fill(fixtureKey);
+  await page.getByRole('button', { name: 'Save on this device', exact: true }).click();
+  await expect(page.getByLabel('API key', { exact: true })).toHaveValue('');
+  await expect(page.locator('.key-state')).toHaveText('Saved on this device');
+  await page.getByRole('button', { name: 'Test connection', exact: true }).click();
+  await expect(page.locator('.connection-feedback[role=status]')).toContainText(
+    'Connection verified by test fixture.',
+  );
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage }))).not.toContain(fixtureKey);
+  await page.reload();
+  await expect(page.getByLabel('Planning provider', { exact: true })).toHaveValue('deepseek');
+  await expect(page.getByLabel('Planning model', { exact: true })).toHaveValue('deepseek-flash');
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  expect(JSON.stringify(await getWorkflow(page))).not.toContain(fixtureKey);
 });
 
 test('small screen keeps controls usable without document overflow', async ({ page }) => {
@@ -344,4 +457,76 @@ test('a schema-valid planning response remains fully editable and undoable (API 
   );
   await page.getByRole('button', { name: 'Undo (Ctrl+Z)' }).click();
   await expect(page.getByText('Generated research draft', { exact: true })).toBeVisible();
+});
+
+test('a cancelled generation cannot replace another project or unlock its pending generation', async ({
+  page,
+}) => {
+  const other = JSON.parse(readFileSync(resolve('examples/team-research.json'), 'utf8'));
+  other.project.id = 'other-saved-project';
+  other.project.name = 'Other saved project';
+  other.nodes.find((node: any) => node.id === 'research').label = 'Other project original task';
+  await page.addInitScript((other) => {
+    localStorage.setItem('knot.projects.v1', JSON.stringify([other]));
+  }, other);
+  const requests: any[] = [];
+  const releases: (() => void)[] = [];
+  const arrivals: (() => void)[] = [];
+  const arrived = [0, 1].map(
+    (index) => new Promise<void>((resolve) => (arrivals[index] = resolve)),
+  );
+  const gates = [0, 1].map((index) => new Promise<void>((resolve) => (releases[index] = resolve)));
+  await page.route('**/api/plan', async (route) => {
+    const index = requests.length;
+    const request = route.request().postDataJSON();
+    requests.push(request);
+    arrivals[index]();
+    await gates[index];
+    const workflow = structuredClone(other);
+    workflow.project = request.project;
+    workflow.resources = request.resources;
+    workflow.nodes.find((node: any) => node.id === 'research').label =
+      index === 0 ? 'Stale generated graph' : 'Fresh generated graph';
+    await route.fulfill({ json: { workflow } });
+  });
+  await openTemplate(page);
+  await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+  await page.getByLabel('Planning model', { exact: true }).fill('fixture-only');
+  await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
+  await arrived[0];
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/workspace$/);
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('button', { name: 'My projects', exact: true }).click();
+  await page.getByRole('button', { name: /Other saved project/ }).click();
+  expect((await getWorkflow(page)).project).toEqual(other.project);
+  await page.getByRole('button', { name: 'AI designer', exact: true }).click();
+  await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
+  await arrived[1];
+  expect(requests[1].project.id).toBe(other.project.id);
+  const oldResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/plan') &&
+      response.request().postDataJSON().project.id === requests[0].project.id,
+  );
+  releases[0]();
+  await (await oldResponse).finished();
+  // Let the resolved fetch and React update finish while request two is still held.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(page).toHaveURL(/#\/workspace\/designer$/);
+  await expect(
+    page.getByRole('button', { name: 'Designing your workflow…', exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator('.project-name h1')).toHaveText(other.project.name);
+  await expect(page.getByText('Stale generated graph', { exact: true })).toHaveCount(0);
+  releases[1]();
+  await expect(page.getByText('Fresh generated graph', { exact: true })).toBeVisible();
+  const result = await getWorkflow(page);
+  expect(result.project).toEqual(other.project);
+  expect(result.resources).toEqual(other.resources);
 });

@@ -42,7 +42,7 @@ python server.py --port 8000
 
 ## 演示流程
 
-1. 创建项目，填写项目名、小组人数、任务目标和最终交付物。
+1. 在首页描述项目想法，点击 **Continue** 填写项目名、小组人数、任务目标和最终交付物；也可以直接点 **Add requirements** 上传需求。
 2. 选择 **Start from scratch** 搭建空白画布，或 **Generate with AI** 使用已配置的规划模型。没有 API 凭证时，可以使用明确标注的演示模板。
 3. 从左侧拖入积木，在画布上移动、连接、配置。执行连线表示何时开始，数据连线表示可以读取哪些上游结果。
 4. 修改任务、Agent、负责人或权限；保存后刷新，或导入/导出工作流 JSON。
@@ -52,13 +52,13 @@ python server.py --port 8000
 
 ## 从需求文件生成工作流
 
-新项目可先填写项目名和人数，再点击 **Upload project requirements** 上传 PDF；已有项目点击 **AI designer → Upload project requirements**。不需要先把 PDF 的内容手动整理成项目目标。
+新项目可在首页点击 **Add requirements** 直接上传 PDF，也可先创建项目；已有项目点击 **AI designer → Upload project requirements**。不需要先把 PDF 的内容手动整理成项目目标。Agents、项目设置和 AI designer 使用独立页面，点击 **Back** 返回画布。
 
 1. 上传 PDF、TXT 或 Markdown 文件，检查并按需修改提取出的原文。
 2. 填写规划模型的 API 模型 ID，点击 **Analyze requirements**。模型会整理项目目标、交付物、具体任务、验收要求，以及还缺少的信息。
 3. 检查并修改任务清单，点击 **Generate workflow from requirements**。生成的积木和连线可以继续编辑；一次 Undo 可恢复生成前的工作流。
 
-上传和文字提取在本地完成，不需要 API key。点击分析、生成时才调用配置的规划模型。支持带可选择文字的 PDF；扫描件尚未提供 OCR，会明确提示换用文本 PDF 或粘贴文字。单个文件最多 5 MiB、PDF 最多 40 页、提取文字最多 60,000 字符，超过限制会提示，不会悄悄截断。
+上传和文字提取在本地完成，不需要 API key。点击分析、生成或测试连接时才调用配置的模型。支持带可选择文字的 PDF；扫描件尚未提供 OCR，会明确提示换用文本 PDF 或粘贴文字。单个文件最多 5 MiB、PDF 最多 40 页、提取文字最多 60,000 字符，超过限制会提示，不会悄悄截断。
 
 生成后，需求原文和确认后的任务清单会作为项目材料保存，随工作流 JSON 和运行包 ZIP 一起导出；不附带原始 PDF。只上传或关闭弹窗不会修改现有画布。完整操作和限制见 [需求文件使用说明](docs/REQUIREMENTS.md)。
 
@@ -80,11 +80,13 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 
 规划模型负责生成结构化草案；任务 Agent 各自使用单独配置的模型连接。支持 OpenAI 兼容接口与 Anthropic Messages；OpenAI 官方 GPT-6 模型执行带工具的任务时自动使用 Responses，模型名称由用户填写。
 
-工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY`，不要把真实 key 放进节点、prompt、JSON 或浏览器。真实 key 在启动后端或运行包的环境中配置；参考 `.env.example` 和导出包内的 `.env.example`。
+工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY`，不要把真实 key 放进节点、prompt 或 JSON。模型设置中的 **API key → Save on this device** 会将凭证保存到本机 `.env.local` 并立即生效；密码框随后清空，浏览器本地存储和导出 ZIP 不包含 key。也可以自行设置后端环境变量。
+
+选择 **DeepSeek** 会自动填写官方 API 地址、`DEEPSEEK_API_KEY` 引用和 `deepseek-flash` 模型 ID；可按账号实际支持的模型修改。DeepSeek 使用现有 OpenAI-compatible 适配器，工作流 schema 不变。参考 [DeepSeek 官方接入说明](https://api-docs.deepseek.com/)。点击 **Test connection** 会发送一条简短测试请求；常规服务限制为 16 个输出 token，OpenAI 官方接口上限为 512（包含推理 token），只有完整返回非空文本才显示成功。测试不发送项目材料。
 
 模型字段必须填写 API 模型 ID。例如 GPT-6 Luna 的 ID 是 `gpt-6-luna`，不能填写带空格的展示名称 `GPT-6 Luna`。规划模型和 Agent 的模型字段都遵守这一规则；参见 [OpenAI 官方模型说明](https://developers.openai.com/api/docs/models/gpt-6-luna)。页面显示 `Credential detected` 只代表配置中有 key，不代表生成请求已成功。
 
-开发后端优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。运行包使用自己的 `.env`。编辑器只有凭证引用输入框，不接收或展示真实 key。
+开发后端启动时优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。在设置页显式保存的新 key 会更新当前后端进程和 `.env.local`，无需重启。规划模型的非敏感连接设置保存在当前浏览器中。下载的运行包使用自己的 `.env`，凭证需在运行包所在电脑另外配置。
 
 - **mock**：固定示例结果，验证调度、条件、权限和人工审核，不调用收费 API。
 - **real**：调用真实 API。缺少模型、凭证或 API 调用失败时明确报错，不会切换到 mock。
@@ -103,7 +105,7 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 
 三个 Agent 可以使用不同 API 地址和密钥；这是配置示意，模型 ID 和地址需要按你的服务填写。一个 Agent 被多个任务复用时，这些任务共享该 Agent 的模型配置。要用不同模型，应建立不同 Agent。切换接口提供商会清空原模型和地址，避免使用上一家服务的配置。
 
-以下五个模型已在 2026-11-07 用真实 API 验证通过。在界面中它们的 Provider 均选 **OpenAI-compatible**，再填写各自的地址和凭证引用：
+以下五个模型已在 2026-11-07 用真实 API 验证通过。在界面中按服务商选择 **OpenAI** 或 **DeepSeek**；自建兼容服务选 **Other OpenAI-compatible API**。地址和凭证引用位于 **Advanced connection settings**：
 
 | 模型 | Model name | API base URL | Credential reference |
 | --- | --- | --- | --- |
@@ -162,7 +164,7 @@ npm run test:browser
 
 Windows 会自动使用默认安装目录中的 Google Chrome。其它环境或没有该 Chrome 时，先运行 `npx playwright install chromium`，也可以将 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 环境变量设为已有浏览器的可执行文件路径。
 
-已完成生产构建、**109 项 Python 验收（108 通过、1 个系统权限相关用例跳过）**、16 项前端数据测试和 **18 项浏览器交互测试**。前端数据测试包含旧版项目迁移、避免覆盖新存档及写入失败后的数据保留。浏览器测试包括真实 PDF 上传与文字提取、任务清单编辑、生成后保存、JSON/ZIP 导出、多 Agent 独立模型配置和切换服务商，也保留了实际拖拽、连线和下载包独立运行的验证。浏览器中的模型响应使用明确的测试数据，真实 API 验证单独记录。完整结果和跳过项见 [验证记录](docs/VERIFICATION.md)。运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成需求上传、任务确认、桌面画布和小屏画布截图；这些文件不随仓库发布。
+已完成生产构建、**125 项 Python 验收（123 通过、2 个系统权限相关用例跳过）**、18 项前端数据测试和 **24 项浏览器交互测试**。前端数据测试包含旧版项目迁移、连接预设和写入失败后的数据保留。浏览器测试包括真实 PDF 上传与文字提取、任务清单编辑、生成后保存、JSON/ZIP 导出、多 Agent 独立模型配置、凭证设置、新首页恢复存档和返回导航，也保留了实际拖拽、连线和下载包独立运行的验证。离开生成页后，旧请求的延迟结果不会覆盖后来打开的项目。浏览器中的模型响应使用明确的测试数据，真实 API 验证单独记录。完整结果和跳过项见 [验证记录](docs/VERIFICATION.md)。运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成需求上传、任务确认、桌面画布和小屏画布截图；这些文件不随仓库发布。
 
 MVP 限定为单机、无环工作流。支持读取文本/CSV、基础 CSV 汇总、写入 Markdown/JSON/CSV，不提供任意 shell、代码执行、联网搜索或浏览器工具。负责人成员信息不会授予凭证或文件访问权限。
 

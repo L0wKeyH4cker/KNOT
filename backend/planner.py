@@ -149,7 +149,7 @@ def build_planner_agent(planner):
     if not isinstance(ref, str) or not ENV_NAME.fullmatch(ref):
         raise PlanningError("凭证引用应为环境变量名称，例如 OPENAI_API_KEY。")
     if not os.environ.get(ref, "").strip():
-        raise PlanningError(f"未配置规划凭证 {ref}，无法进行真实 AI 生成。请在本地环境配置后重启服务，或使用明确标注的演示模板。", status=503)
+        raise PlanningError(f"未配置规划凭证 {ref}。请在模型设置中填写 API Key 并点击 Save on this device，或在本地环境中配置。", status=503)
     reject_secrets(planner)
     agent = {"id": "planner", "name": "Workflow planner", "provider": provider, "model": model.strip(), "credential_ref": ref, "tools": []}
     if planner.get("base_url"):

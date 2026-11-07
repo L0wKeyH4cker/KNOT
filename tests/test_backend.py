@@ -246,6 +246,33 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(context.exception.code, 403)
         context.exception.close()
 
+    def test_credential_endpoint_activates_local_key_and_tests_without_exposing_it(self):
+        fixture = "dummy-local-route-credential"
+        # Keep Windows/SSL runtime settings while isolating the credential under test.
+        with temporary_run("knot-credential-route-") as directory, patch("server.ROOT", Path(directory)), patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+            with self.post("/api/credentials", {"credential_ref": "DEEPSEEK_API_KEY", "key": fixture}) as response:
+                payload = json.load(response)
+            self.assertTrue(payload["credentials"]["DEEPSEEK_API_KEY"])
+            self.assertNotIn(fixture, json.dumps(payload))
+            with urllib.request.urlopen(self.base + "/api/health") as response:
+                health = json.load(response)
+            connection = health["default_planner"]
+            self.assertEqual(connection["credential_ref"], "DEEPSEEK_API_KEY")
+            self.assertNotIn(fixture, json.dumps(health))
+            with patch("backend.connections._post", return_value={"choices": [{"finish_reason": "stop", "message": {"content": "OK"}}]}):
+                with self.post("/api/connection/test", {"connection": connection}) as response:
+                    checked = json.load(response)
+            self.assertTrue(checked["ok"])
+            self.assertNotIn(fixture, json.dumps(checked))
+
+    def test_credential_endpoint_rejects_cross_origin_before_writing(self):
+        with temporary_run("knot-credential-origin-") as directory, patch("server.ROOT", Path(directory)):
+            with self.assertRaises(urllib.error.HTTPError) as result:
+                self.post("/api/credentials", {"credential_ref": "DEEPSEEK_API_KEY", "key": "dummy-blocked-origin-key"}, {"Origin": "https://example.org"})
+            self.assertEqual(result.exception.code, 403)
+            result.exception.close()
+            self.assertFalse((Path(directory) / ".env.local").exists())
+
     def test_secret_input_is_rejected_without_echoing_it(self):
         fixture_secret = "unit-test-never-a-real-provider-credential"
         workflow = load_template()

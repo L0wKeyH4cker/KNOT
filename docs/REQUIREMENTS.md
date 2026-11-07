@@ -7,7 +7,7 @@ KNOT 可以先读项目要求，再拆出任务，最后生成可以编辑的工
 1. 新项目选择 **Upload project requirements**；已有项目打开 **AI designer**。
 2. 在 **Upload project requirements** 上传 PDF、TXT 或 Markdown。PDF 需要包含可选择、复制的文字。
 3. 查看 **Extracted requirement text**。这一步只是本地提取，可以核对或修正文档文字，不调用模型。
-4. 在模型设置中选择提供商、填写准确的 API 模型 ID。凭证栏填写后端环境变量名称，例如 `OPENAI_API_KEY`；真实 key 继续保存在本地后端配置中。
+4. 在模型设置中选择提供商、填写准确的 API 模型 ID。选择 DeepSeek 可自动填入对应模型和地址。在 API key 密码框中填写凭证，点击 **Save on this device**，再点击 **Test connection** 验证连接。环境变量引用和自定义地址位于 **Advanced connection settings**；真实 key 保存在本机后端 `.env.local`，不进入工作流或浏览器持久化存储。
 5. 点击 **Analyze requirements**，查看模型整理出的目标、交付物、任务、验收要求、限制和待确认信息。任务会标注对应的来源页码，可以逐项修改。
 6. 确认后点击 **Generate workflow from requirements**。画布会展示工作流，你仍然可以修改积木、任务、成员分工、Agent 和连线。
 7. 保存项目或导出 JSON；需要在本地执行时下载 **Export runner** 运行包。

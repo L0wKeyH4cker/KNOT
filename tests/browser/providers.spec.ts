@@ -33,6 +33,15 @@ async function chooseAgent(page: Page, name: string) {
   await page.locator('.agent-choice').filter({ hasText: name }).click();
 }
 
+async function openAdvanced(page: Page) {
+  if (
+    !(await page
+      .locator('.connection-advanced')
+      .evaluate((element) => (element as HTMLDetailsElement).open))
+  )
+    await page.getByText('Advanced connection settings', { exact: true }).click();
+}
+
 const configurations = [
   {
     id: 'researcher',
@@ -69,10 +78,11 @@ test('three agents retain independent API settings and task assignments after sa
     await chooseAgent(page, agent.name);
     await page.getByLabel('Provider', { exact: true }).selectOption(agent.provider);
     await page.getByLabel('Model name', { exact: true }).fill(agent.model);
+    await openAdvanced(page);
     await page.getByLabel('Credential reference', { exact: true }).fill(agent.credential_ref);
     await page.getByLabel('API base URL (optional)', { exact: true }).fill(agent.base_url);
   }
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   // Explicitly bind each task through the editor, rather than only relying on
   // the template's existing bindings.
   for (const [task, agent] of [
@@ -104,7 +114,10 @@ test('three agents retain independent API settings and task assignments after sa
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   for (const agent of configurations) {
     await chooseAgent(page, agent.name);
-    await expect(page.getByLabel('Provider', { exact: true })).toHaveValue(agent.provider);
+    await expect(page.getByLabel('Provider', { exact: true })).toHaveValue(
+      agent.provider === 'openai' ? 'custom' : 'anthropic',
+    );
+    await openAdvanced(page);
     await expect(page.getByLabel('Model name', { exact: true })).toHaveValue(agent.model);
     await expect(page.getByLabel('Credential reference', { exact: true })).toHaveValue(
       agent.credential_ref,
@@ -121,11 +134,13 @@ test('switching provider clears incompatible model and address for an agent and 
   await openTemplate(page);
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByLabel('Model name', { exact: true }).fill('old-provider-model');
+  await openAdvanced(page);
   await page.getByLabel('Credential reference', { exact: true }).fill('OLD_PROVIDER_API_KEY');
   await page
     .getByLabel('API base URL (optional)', { exact: true })
     .fill('https://old.example.invalid/v1');
   await page.getByLabel('Provider', { exact: true }).selectOption('anthropic');
+  await openAdvanced(page);
   await expect(page.getByLabel('Model name', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Credential reference', { exact: true })).toHaveValue(
     'ANTHROPIC_API_KEY',
@@ -136,10 +151,11 @@ test('switching provider clears incompatible model and address for an agent and 
   await page
     .getByLabel('API base URL (optional)', { exact: true })
     .fill('https://execution.example.invalid/v1');
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   const beforePlanner = await getWorkflow(page);
   await page.getByRole('button', { name: 'AI designer', exact: true }).click();
   await page.getByLabel('Planning model', { exact: true }).fill('old-planning-model');
+  await openAdvanced(page);
   await page
     .getByLabel('Credential environment variable', { exact: true })
     .fill('PLANNING_API_KEY');
@@ -147,13 +163,19 @@ test('switching provider clears incompatible model and address for an agent and 
     .getByLabel('API base URL (optional)', { exact: true })
     .fill('https://planning.example.invalid/v1');
   await page.getByLabel('Planning provider', { exact: true }).selectOption('anthropic');
+  await openAdvanced(page);
   await expect(page.getByLabel('Planning model', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Credential environment variable', { exact: true })).toHaveValue(
     'ANTHROPIC_API_KEY',
   );
   await expect(page.getByLabel('API base URL (optional)', { exact: true })).toHaveValue('');
   await page.getByLabel('Planning model', { exact: true }).fill('independent-planner-model');
-  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.reload();
+  await expect(page.getByLabel('Planning model', { exact: true })).toHaveValue(
+    'independent-planner-model',
+  );
+  await expect(page.getByLabel('Planning provider', { exact: true })).toHaveValue('anthropic');
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   expect((await getWorkflow(page)).agents).toEqual(beforePlanner.agents);
 });
 
@@ -170,21 +192,30 @@ test('a custom credential reference is shown as unchecked instead of incorrectly
       }),
     }),
   );
+  await page.route('**/api/connection/test', async (route) => {
+    expect(route.request().postDataJSON().connection.credential_ref).toBe('CUSTOM_ROUTER_API_KEY');
+    await route.fulfill({ json: { ok: true, message: 'Custom reference checked by fixture.' } });
+  });
   await openTemplate(page);
   await page.getByRole('button', { name: 'AI designer', exact: true }).click();
-  const status = page.locator('.credential-status');
-  await expect(status).toHaveText('Credential detected on local backend');
+  const status = page.locator('.key-state');
+  await expect(status).toHaveText('Saved on this device');
+  await openAdvanced(page);
   await page
     .getByLabel('Credential environment variable', { exact: true })
     .fill('CUSTOM_ROUTER_API_KEY');
-  await expect(status).toContainText('Credential status not checked for this reference.');
-  await expect(status).not.toContainText('No credential detected');
+  await expect(status).toHaveText('Credential status not checked');
   await page.getByLabel('Planning model', { exact: true }).fill('fixture-model');
   await expect(page.getByRole('button', { name: 'Generate with AI', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Test connection', exact: true }).click();
+  await expect(page.locator('.connection-feedback[role=status]')).toContainText(
+    'Custom reference checked by fixture.',
+  );
   await page
     .getByLabel('Credential environment variable', { exact: true })
     .fill('ANTHROPIC_API_KEY');
-  await expect(status).toContainText('No credential detected');
+  await expect(status).toHaveText('Not configured');
+  await expect(page.getByRole('button', { name: 'Test connection', exact: true })).toBeDisabled();
   await page.getByLabel('Credential environment variable', { exact: true }).fill('OPENAI_API_KEY');
-  await expect(status).toHaveText('Credential detected on local backend');
+  await expect(status).toHaveText('Saved on this device');
 });
