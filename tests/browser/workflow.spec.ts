@@ -228,7 +228,7 @@ test('AI is honest when credentials are absent; task model and planner are separ
   await page.getByRole('button', { name: 'AI designer', exact: true }).click();
   await page
     .getByLabel('Credential environment variable', { exact: true })
-    .fill('TEAMBLOCKS_TEST_MISSING_KEY');
+    .fill('KNOT_TEST_MISSING_KEY');
   await expect(
     page.getByText('No credential detected. Real AI generation is unavailable until configured.'),
   ).toBeVisible();

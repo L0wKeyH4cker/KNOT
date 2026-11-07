@@ -26,7 +26,7 @@ const python = candidates.find(([command, ...args]) => {
 });
 if (!python) {
   console.error(
-    'TeamBlocks needs Python 3.10+. Install Python, or set PYTHON to your python executable path.',
+    'KNOT needs Python 3.10+. Install Python, or set PYTHON to your python executable path.',
   );
   process.exit(1);
 }
@@ -64,7 +64,7 @@ function launch(command, args) {
     if (!stopping) stop(signal ? 1 : (code ?? 1));
   });
 }
-console.log('TeamBlocks · editor http://127.0.0.1:5173 · API http://127.0.0.1:8000');
+console.log('KNOT · editor http://127.0.0.1:5173 · API http://127.0.0.1:8000');
 launch(python[0], [...python.slice(1), 'server.py', '--port', '8000']);
 launch(process.execPath, [vite, '--host', '127.0.0.1', '--port', '5173', '--strictPort']);
 process.on('SIGINT', () => stop(0));

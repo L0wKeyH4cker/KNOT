@@ -79,7 +79,7 @@ def _extract_pdf_subprocess(raw):
     # The parser does not need credentials. Preserve only OS/runtime configuration.
     environment = {key: value for key, value in os.environ.items() if key.upper() in {
         "SYSTEMROOT", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP", "PYTHONPATH", "PYTHONHOME",
-        "LANG", "LC_ALL", "TEAMBLOCKS_PDF_MEMORY_MB",
+        "LANG", "LC_ALL", "KNOT_PDF_MEMORY_MB",
     }}
     try:
         completed = subprocess.run(
@@ -166,7 +166,7 @@ def _extract_pdf(raw):
 def _limit_worker_memory():
     """Best-effort OS cap in addition to mandatory decompression and wall-time limits."""
     try:
-        memory_mb = max(128, min(int(os.environ.get("TEAMBLOCKS_PDF_MEMORY_MB", "768")), 2048))
+        memory_mb = max(128, min(int(os.environ.get("KNOT_PDF_MEMORY_MB", "768")), 2048))
     except ValueError:
         memory_mb = 768
     memory_bytes = memory_mb * 1024 * 1024

@@ -21,7 +21,7 @@ class DeliveryAcceptanceTests(unittest.TestCase):
         # Stay in the authorized workspace, while the subprocess only sees the extracted bundle.
         self.scratch = Path(__file__).resolve().parents[1] / ".test-tmp"
         self.scratch.mkdir(exist_ok=True)
-        self.temporary = tempfile.TemporaryDirectory(prefix="teamblocks-delivery-", dir=self.scratch)
+        self.temporary = tempfile.TemporaryDirectory(prefix="knot-delivery-", dir=self.scratch)
         self.root = Path(self.temporary.name).resolve()
         self.assertTrue(self.root.is_relative_to(self.scratch.resolve()))
         self.workflow = load_template()

@@ -16,8 +16,8 @@ from backend.template import load_template
 from runtime.providers import ProviderError
 
 
-PLANNER = {"provider": "openai", "model": "fixture-model", "credential_ref": "TEAMBLOCKS_REQUIREMENTS_TEST_KEY"}
-TEST_ENV = {"TEAMBLOCKS_REQUIREMENTS_TEST_KEY": "unit-test-only-not-a-provider-key"}
+PLANNER = {"provider": "openai", "model": "fixture-model", "credential_ref": "KNOT_REQUIREMENTS_TEST_KEY"}
+TEST_ENV = {"KNOT_REQUIREMENTS_TEST_KEY": "unit-test-only-not-a-provider-key"}
 
 
 def document_fixture():

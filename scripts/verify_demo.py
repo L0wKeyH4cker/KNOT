@@ -27,10 +27,10 @@ def main():
     scratch.mkdir(exist_ok=True)
     workflow = load_template()
     bundle = build_bundle(workflow)
-    (artifacts / "teamblocks-demo.zip").write_bytes(bundle)
+    (artifacts / "knot-demo.zip").write_bytes(bundle)
     with tempfile.TemporaryDirectory(prefix="final-demo-", dir=scratch) as folder:
         run_root = Path(folder)
-        with zipfile.ZipFile(artifacts / "teamblocks-demo.zip") as archive:
+        with zipfile.ZipFile(artifacts / "knot-demo.zip") as archive:
             archive.extractall(run_root)
         first = subprocess.run([sys.executable, "-X", "utf8", "run.py", "--mode", "mock"], cwd=run_root, capture_output=True, text=True, encoding="utf-8", timeout=30)
         state = json.loads((run_root / "logs/run-state.json").read_text(encoding="utf-8"))
@@ -48,7 +48,7 @@ def main():
             assert source.is_file()
             shutil.copyfile(source, destination / source.name)
         evidence = {
-            "bundle": "artifacts/teamblocks-demo.zip",
+            "bundle": "artifacts/knot-demo.zip",
             "bundle_sha256": hashlib.sha256(bundle).hexdigest(),
             "mode": "mock",
             "first_exit_code": first.returncode,

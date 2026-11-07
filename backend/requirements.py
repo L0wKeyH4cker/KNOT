@@ -14,7 +14,7 @@ MAX_TEXT_CHARACTERS = 60_000
 MAX_DOCUMENT_PAGES = 40
 MAX_TASKS = 12
 
-REQUIREMENTS_GUIDE = r'''You extract project requirements for TeamBlocks. Return exactly one JSON object with these fields, with no prose outside JSON:
+REQUIREMENTS_GUIDE = r'''You extract project requirements for KNOT. Return exactly one JSON object with these fields, with no prose outside JSON:
 {
   "project_name": "short source-grounded project name",
   "goal": "what the project is intended to achieve",
@@ -31,7 +31,7 @@ document.text is the authoritative, possibly user-edited requirement text. docum
 
 Extract facts actually supported by the text. Distinguish requested future work from completed work. Do not invent facts, results, dataset availability, deadlines, budgets, stakeholders or specific targets. You may break an explicit requirement into reasonable implementation tasks and propose checkable acceptance criteria without adding arbitrary requirements; list unresolved details in missing_information. If the input is too vague to specify the work, identify the clarification work and the missing information honestly. Preserve explicitly stated constraints and required review steps. Mention extraction warnings or unreadable pages in missing_information so missing text is not treated as complete requirements.
 
-The current TeamBlocks runtime can produce Markdown, JSON and CSV files. It cannot directly create PDF, PowerPoint/slides, Word documents, deploy applications or perform unconfigured external actions. Preserve an explicitly requested unsupported deliverable in deliverables, state the limitation and the required external/manual step in missing_information, and describe supported intermediate content in the tasks. Never promise an unsupported artifact or pretend a missing integration exists. This is a requirements draft for human review; do not claim any task has already run.
+The current KNOT runtime can produce Markdown, JSON and CSV files. It cannot directly create PDF, PowerPoint/slides, Word documents, deploy applications or perform unconfigured external actions. Preserve an explicitly requested unsupported deliverable in deliverables, state the limitation and the required external/manual step in missing_information, and describe supported intermediate content in the tasks. Never promise an unsupported artifact or pretend a missing integration exists. This is a requirements draft for human review; do not claim any task has already run.
 '''
 
 

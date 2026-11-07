@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portable TeamBlocks launcher. No third-party Python dependencies required."""
+"""Portable KNOT launcher. No third-party Python dependencies required."""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,7 @@ from runtime.validation import validate_workflow
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the exact TeamBlocks workflow in mock or real mode")
+    parser = argparse.ArgumentParser(description="Run the exact KNOT workflow in mock or real mode")
     parser.add_argument("--workflow", default="workflow.json", help="Workflow JSON file")
     parser.add_argument("--root", default=".", help="Directory containing inputs/, results/ and logs/")
     parser.add_argument("--state", default="logs/run-state.json", help="Relative logs/ state path")
@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.resume:
             engine.resume(args.review, args.decision, args.reviewer)
         state = engine.run()
-        print(f"TeamBlocks mode={args.mode} status={state['status']}")
+        print(f"KNOT mode={args.mode} status={state['status']}")
         for nid, item in state["nodes"].items():
             print(redact(f"  {nid}: {item['status']}" + (f" — {item['error']}" if item.get("error") else "")))
             if item["status"] == "waiting_review":
@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(redact({"status": "invalid", "issues": error.issues}), ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     except (ValueError, OSError, RuntimeError) as error:
-        print(redact(f"TeamBlocks error: {error}"), file=sys.stderr)
+        print(redact(f"KNOT error: {error}"), file=sys.stderr)
         return 1
 
 

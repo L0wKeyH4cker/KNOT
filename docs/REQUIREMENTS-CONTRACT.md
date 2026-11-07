@@ -1,6 +1,6 @@
 # Requirements document intake implementation contract
 
-This adds a document-first entry to existing TeamBlocks; no credentials in frontend and no change to runtime node semantics.
+This adds a document-first entry to existing KNOT; no credentials in frontend and no change to runtime node semantics.
 
 ## HTTP
 - POST `/api/requirements/extract` JSON `{filename:string, content_base64:string}`. Maximum upload 5 MiB, PDF <= 40 pages, extracted text <= 60,000 characters; reject above limits with clear errors, no silent truncation. `.pdf`, `.txt`, `.md` only. Returns `{document: RequirementDocument}`.

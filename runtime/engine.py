@@ -326,7 +326,7 @@ class Engine:
         self._event("run_resumed" if self.resuming else "run_started", mode=self.mode)
         self._save()
         futures = {}
-        with ThreadPoolExecutor(max_workers=self.limits["max_concurrency"], thread_name_prefix="teamblocks") as pool:
+        with ThreadPoolExecutor(max_workers=self.limits["max_concurrency"], thread_name_prefix="knot") as pool:
             while True:
                 changed = False
                 for nid, node in self.nodes.items():

@@ -47,6 +47,7 @@ import BlockNode, { icons } from './BlockNode';
 import Inspector, { Field } from './Inspector';
 import { AgentsSettings, ProjectSettings } from './Settings';
 import RequirementIntake from './RequirementIntake';
+import { KNOT_STORAGE, KNOT_LIBRARY, migrateLegacyStorage } from './storage';
 import type { Planner } from './Settings';
 import {
   KINDS,
@@ -62,10 +63,11 @@ import {
 } from './model';
 import type { Workflow, Block, NodeKind, Link, Issue } from './model';
 const nodeTypes = { block: BlockNode };
-const STORAGE = 'teamblocks.current.v1',
-  LIBRARY = 'teamblocks.projects.v1';
+const STORAGE = KNOT_STORAGE,
+  LIBRARY = KNOT_LIBRARY;
 function restore() {
   try {
+    migrateLegacyStorage(localStorage);
     const raw = localStorage.getItem(STORAGE);
     return raw ? parseWorkflow(JSON.parse(raw)) : null;
   } catch {
@@ -378,7 +380,7 @@ export default function App() {
       }
       download(
         await res.blob(),
-        `${wf.project.name.replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'teamblocks'}-runner.zip`,
+        `${wf.project.name.replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'knot'}-runner.zip`,
       );
       setModal('exported');
     } catch (e) {
@@ -482,7 +484,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <nav className="rail" aria-label="Main navigation">
-        <button className="brand-mark" title="TeamBlocks home" onClick={openLibrary}>
+        <button className="brand-mark" title="KNOT home" onClick={openLibrary}>
           <Blocks size={24} />
         </button>
         <div className="rail-middle">
@@ -515,7 +517,7 @@ export default function App() {
       <div className="workspace">
         <header className="app-header">
           <div className="brand-word">
-            TeamBlocks<span>WORKSPACE</span>
+            KNOT<span>WORKSPACE</span>
           </div>
           <div className="header-right">
             <span className={`backend-status ${online ? 'online' : ''}`}>
@@ -616,7 +618,7 @@ export default function App() {
                         key={k}
                         draggable
                         onDragStart={(e) => {
-                          e.dataTransfer.setData('application/teamblocks', k);
+                          e.dataTransfer.setData('application/knot', k);
                           e.dataTransfer.effectAllowed = 'move';
                         }}
                         onClick={() => add(k)}
@@ -708,7 +710,7 @@ export default function App() {
               }}
               onDrop={(e) => {
                 e.preventDefault();
-                const kind = e.dataTransfer.getData('application/teamblocks') as NodeKind;
+                const kind = e.dataTransfer.getData('application/knot') as NodeKind;
                 if (KINDS[kind])
                   add(kind, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
               }}
@@ -865,7 +867,7 @@ export default function App() {
             <div className="onboarding-art">
               <span className="onboarding-brand">
                 <Blocks size={23} />
-                TeamBlocks
+                KNOT
               </span>
               <span className="eyebrow">BETTER WORK, TOGETHER</span>
               <h2>
@@ -1085,7 +1087,7 @@ export default function App() {
           >
             <div className="modal-head">
               <div>
-                <span className="eyebrow">TEAMBLOCKS STUDIO</span>
+                <span className="eyebrow">KNOT STUDIO</span>
                 <h2>
                   {
                     {

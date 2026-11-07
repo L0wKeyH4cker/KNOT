@@ -4,7 +4,7 @@
 
 ## 环境
 
-- 工作目录：用户本地 TeamBlocks 项目。
+- 工作目录：用户本地 KNOT 项目。
 - Node.js：主进程已发现 24.19.0。
 - Python：已实际执行用户 Miniconda 解释器，版本 3.14.6；系统 `python.exe` 是不可执行的 WindowsApps 别名。`scripts/dev.mjs` 会自动查找有效解释器。
 - 初次交付时没有 OpenAI 或 Anthropic API 凭证；当时没有进行真实模型调用。之后的连接排障记录见下文。
@@ -14,13 +14,15 @@
 | 验证 | 实际结果 |
 | --- | --- |
 | Python 后端、执行器、导出集成测试 | 最新同次整合运行 **94 项：93 通过、1 跳过、0 失败** |
-| 前端工作流与需求材料数据测试 | **10 项全部通过** |
+| 前端工作流、需求材料及存档迁移数据测试 | **16 项全部通过** |
 | Windows 启动器 | 实际解压 ZIP，执行 `start.bat`，创建 `.venv` 和 `.env`，成功运行至人工审核，退出码 2 |
 | macOS/Linux 启动器 | Git Bash `bash -n` 语法检查通过；没有在 macOS/Linux 主机上执行 |
 | 独立示例交付 | 导出 ZIP → 新目录解压 → mock 运行 → 审核暂停 → 显式确认 → 生成 report.md 和 summary.csv |
 | 前端生产构建 | `npm run build` 已通过：TypeScript 检查与 Vite 生产构建成功 |
 | 浏览器实际交互 | Playwright + 独立 Chrome：**15 项全部通过**，19.8 秒；包含 PDF 上传、文字提取、任务确认、生成与保存、下载，以及原有画布和运行包验证 |
 | 真实模型 API | **需求分析、工作流生成通过**：`gpt-6-luna` 处理两页合成 PDF，提取 3 项任务，生成 7 节点、14 连线；尚未实际执行生成工作流的 real Agent 任务 |
+
+KNOT 更名复验：生产构建通过；Python 94 项（93 通过、1 项系统权限跳过）、前端数据 16 项、浏览器 15 项全部完成。独立浏览器还验证了页面标题与可见品牌、旧版项目和项目库恢复，以及 `knot-workflow.zip` 下载名。生成的 `knot-demo.zip` 内 README、启动器和执行器均使用新名称，已重新独立运行到审核并在测试批准后交付。代码仅在旧存档兼容键及其测试中保留旧标识，不显示为产品名称。
 
 Python 跳过项为“创建符号链接后验证读取被阻止”：Windows 主机未授权测试进程创建符号链接。路径越界、Windows 预留文件名、大小写等价路径和最终文件保护的测试均已通过。执行器另外检查符号链接、junction/reparse 路径，但这一系统级用例尚未实跑。
 
@@ -55,7 +57,7 @@ npm run test:browser
 - **模型协议**：OpenAI Chat Completions 与 Anthropic Messages 的消息、工具调用、用量和错误处理有测试；有限工具轮数、缺 key、失败不回退均通过。另有真实 HTTP 请求到本地测试服务，覆盖混合两种适配器的 real 模式工作流、各任务独立上下文，以及慢响应流的总超时。它使用本地固定响应和测试凭证，不等同于提供商线上调用。
 - **凭证边界**：明显 key/secret 字段在前端保存前被拒绝；后端拒绝工作流内的环境凭证值；自定义凭证引用对应的值会被脱敏。ZIP 只含环境变量引用与空白 `.env.example`，无开发者绝对路径。
 
-验收在本地生成了 `artifacts/teamblocks-demo.zip`、`artifacts/demo-verification.json`、`artifacts/demo-results/report.md`、`artifacts/demo-results/summary.csv` 和对应事件/状态日志。整个 `artifacts/` 目录已由 Git 忽略，不包含在仓库中；可运行下方演示验收命令重新生成。示例审核由验收过程明确模拟确认，不声称通过了人类身份认证。`python -m backend.export_example` 只重新生成 ZIP，不运行工作流、不生成成果、不自动审核。
+验收在本地生成了 `artifacts/knot-demo.zip`、`artifacts/demo-verification.json`、`artifacts/demo-results/report.md`、`artifacts/demo-results/summary.csv` 和对应事件/状态日志。整个 `artifacts/` 目录已由 Git 忽略，不包含在仓库中；可运行下方演示验收命令重新生成。示例审核由验收过程明确模拟确认，不声称通过了人类身份认证。`python -m backend.export_example` 只重新生成 ZIP，不运行工作流、不生成成果、不自动审核。
 
 `python scripts/verify_demo.py` 是完整演示验收入口：重新打包、解压到临时目录、检查初次运行暂停且最终文件不存在，再显式调用 approve 恢复，保存报告、CSV、日志和验证摘要。成功后摘要包含所验 ZIP 的 SHA-256，便于核对包与证据一致。此脚本明确模拟审核，仅用于开发验收，不打包到普通运行包中。
 
@@ -81,7 +83,7 @@ npm run test:browser
 - UI 成功渲染不能代替实际拖拽、连线、恢复和导出后运行的验证。
 - 规划请求缺少 key 必须明确报错；模板不是 AI 生成结果。
 
-初次版本复验使用 `npm run build` 的生产产物，由 Python `server.py` 在端口 8000 提供页面。设置 `TEAMBLOCKS_URL=http://127.0.0.1:8000` 后运行浏览器测试，10/10 通过（12.2 秒）。`scripts/verify_demo.py` 重新导出并实际执行当时的运行包；ZIP 为 21 个条目，29,930 字节，审核前 report.md 和 summary.csv 不存在，批准后两者生成。重新运行 `python scripts/verify_demo.py` 后，可在本地 `artifacts/demo-verification.json` 查看对应运行包的大小和 SHA256。
+初次版本复验使用 `npm run build` 的生产产物，由 Python `server.py` 在端口 8000 提供页面。设置 `KNOT_URL=http://127.0.0.1:8000` 后运行浏览器测试，10/10 通过（12.2 秒）。`scripts/verify_demo.py` 重新导出并实际执行当时的运行包；ZIP 为 21 个条目，29,930 字节，审核前 report.md 和 summary.csv 不存在，批准后两者生成。重新运行 `python scripts/verify_demo.py` 后，可在本地 `artifacts/demo-verification.json` 查看对应运行包的大小和 SHA256。
 
 ## 后续 API 连接排障（2026-11-06）
 
@@ -93,7 +95,7 @@ npm run test:browser
 
 完整 Python 回归实际执行 **94 项，93 通过、1 项系统符号链接权限跳过**。新增验证覆盖真实文本 PDF 提取、页码和文档指纹、混合空白页提示、扫描件/加密/损坏/超限文件拒绝、解析超时、需求分析结构校验与修复、无凭证拒绝，以及原文传入规划模型和资源保留。`npm run test:model` 的 **10 项前端数据测试全部通过**，包括需求材料组装、保留原项目内容和无效任务拒绝；最终生产构建通过。
 
-最新生产构建由独立本地测试服务 `http://127.0.0.1:8001` 提供，未停止用户已有服务。设置 `TEAMBLOCKS_URL` 后运行全部浏览器测试，**15 项全部通过，19.8 秒**。五项新增用例位于 `tests/browser/requirements.spec.ts`：
+最新生产构建由独立本地测试服务 `http://127.0.0.1:8001` 提供，未停止用户已有服务。设置 `KNOT_URL` 后运行全部浏览器测试，**15 项全部通过，19.8 秒**。五项新增用例位于 `tests/browser/requirements.spec.ts`：
 
 - 新项目不填写目标或交付物，直接上传真实两页 PDF；实际调用后端提取文字，再分析并编辑任务标题，生成画布后继续修改、保存、刷新。
 - 真实无文字 PDF 被后端拒绝，页面显示扫描件/OCR 说明，不调用规划模型。

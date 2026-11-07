@@ -87,9 +87,9 @@ class ProviderDiagnosticTests(unittest.TestCase):
         workflow = load_template()
         provider_error = ProviderError("untrusted private exception body", http_status=404, error_code="model_not_found")
         call = Mock(side_effect=provider_error)
-        with patch.dict(os.environ, {"TEAMBLOCKS_DIAGNOSTIC_KEY": "fixture-key-no-live-request"}):
+        with patch.dict(os.environ, {"KNOT_DIAGNOSTIC_KEY": "fixture-key-no-live-request"}):
             with self.assertRaises(PlanningError) as raised:
-                plan_workflow(workflow["project"], workflow["resources"], {"provider": "openai", "model": "user-entered-model", "credential_ref": "TEAMBLOCKS_DIAGNOSTIC_KEY"}, model_call=call)
+                plan_workflow(workflow["project"], workflow["resources"], {"provider": "openai", "model": "user-entered-model", "credential_ref": "KNOT_DIAGNOSTIC_KEY"}, model_call=call)
         message = str(raised.exception)
         self.assertIn("HTTP 404", message)
         self.assertIn("model_not_found", message)
@@ -101,8 +101,8 @@ class ProviderDiagnosticTests(unittest.TestCase):
 
     def test_unstructured_provider_exception_never_reveals_message(self):
         workflow = load_template()
-        with patch.dict(os.environ, {"TEAMBLOCKS_DIAGNOSTIC_KEY": "fixture-key-no-live-request"}), self.assertRaises(PlanningError) as raised:
-            plan_workflow(workflow["project"], [], {"provider": "openai", "model": "fixture", "credential_ref": "TEAMBLOCKS_DIAGNOSTIC_KEY"}, model_call=Mock(side_effect=RuntimeError("private provider response")))
+        with patch.dict(os.environ, {"KNOT_DIAGNOSTIC_KEY": "fixture-key-no-live-request"}), self.assertRaises(PlanningError) as raised:
+            plan_workflow(workflow["project"], [], {"provider": "openai", "model": "fixture", "credential_ref": "KNOT_DIAGNOSTIC_KEY"}, model_call=Mock(side_effect=RuntimeError("private provider response")))
         self.assertNotIn("private provider response", str(raised.exception))
 
 

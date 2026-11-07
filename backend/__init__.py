@@ -1,4 +1,4 @@
-"""TeamBlocks local application services."""
+"""KNOT local application services."""
 
 from pathlib import Path
 import sys

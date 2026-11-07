@@ -73,22 +73,22 @@ exec .venv/bin/python run.py "$@"
 START_BAT = r'''@echo off
 setlocal
 cd /d "%~dp0"
-set "TEAMBLOCKS_PY="
+set "KNOT_PY="
 python -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" >nul 2>&1
-if not errorlevel 1 set "TEAMBLOCKS_PY=python"
-if defined TEAMBLOCKS_PY goto python_found
+if not errorlevel 1 set "KNOT_PY=python"
+if defined KNOT_PY goto python_found
 py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" >nul 2>&1
-if not errorlevel 1 set "TEAMBLOCKS_PY=py -3"
-if defined TEAMBLOCKS_PY goto python_found
-if exist "%USERPROFILE%\miniconda3\python.exe" set TEAMBLOCKS_PY="%USERPROFILE%\miniconda3\python.exe"
-if defined TEAMBLOCKS_PY goto python_found
+if not errorlevel 1 set "KNOT_PY=py -3"
+if defined KNOT_PY goto python_found
+if exist "%USERPROFILE%\miniconda3\python.exe" set KNOT_PY="%USERPROFILE%\miniconda3\python.exe"
+if defined KNOT_PY goto python_found
 echo Python 3.10+ is required. Install it from https://www.python.org/downloads/
 exit /b 1
 :python_found
-%TEAMBLOCKS_PY% -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" >nul 2>&1
+%KNOT_PY% -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" >nul 2>&1
 if errorlevel 1 exit /b 1
 if exist ".venv\Scripts\python.exe" goto venv_ready
-%TEAMBLOCKS_PY% -m venv --without-pip .venv
+%KNOT_PY% -m venv --without-pip .venv
 if errorlevel 1 exit /b 1
 :venv_ready
 if not exist .env copy .env.example .env >nul
@@ -113,11 +113,11 @@ def bundle_readme(workflow, missing):
         for a in workflow.get("agents", [])
     )
     missing_rows = "\n".join(f"- `{p}`" for p in missing) or "None. All declared inline resources are included."
-    return f'''# TeamBlocks local workflow package
+    return f'''# KNOT local workflow package
 
 Project: **{workflow['project']['name']}**
 
-This package contains the fixed, tested Python executor and the workflow exactly as exported from the canvas. It does not call the TeamBlocks editor/backend. Layout changes do not change execution; node configuration and dependency changes do.
+This package contains the fixed, tested Python executor and the workflow exactly as exported from the canvas. It does not call the KNOT editor/backend. Layout changes do not change execution; node configuration and dependency changes do.
 
 ## Start (Python 3.10+)
 

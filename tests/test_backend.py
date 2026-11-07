@@ -83,7 +83,7 @@ class BundleTests(unittest.TestCase):
 
     def test_export_runs_in_fresh_directory_and_waits_before_delivery(self):
         workflow = load_template()
-        with temporary_run("teamblocks-independent-") as directory:
+        with temporary_run("knot-independent-") as directory:
             root = Path(directory)
             with zipfile.ZipFile(io.BytesIO(build_bundle(workflow))) as archive:
                 archive.extractall(root)
@@ -102,7 +102,7 @@ class BundleTests(unittest.TestCase):
         workflow = load_template()
         workflow["nodes"][5]["config"]["mock_result"]["content"] = "# Modified by the canvas\n"
         workflow["nodes"][7]["config"]["mappings"][0]["filename"] = "edited-report.md"
-        with temporary_run("teamblocks-edit-") as directory:
+        with temporary_run("knot-edit-") as directory:
             root = Path(directory)
             with zipfile.ZipFile(io.BytesIO(build_bundle(workflow))) as archive:
                 archive.extractall(root)
@@ -116,10 +116,10 @@ class BundleTests(unittest.TestCase):
 class PlannerTests(unittest.TestCase):
     def setUp(self):
         self.workflow = valid_ai_draft()
-        self.planner = {"provider": "openai", "model": "fixture-model", "credential_ref": "TEAMBLOCKS_TEST_PLANNER_KEY"}
+        self.planner = {"provider": "openai", "model": "fixture-model", "credential_ref": "KNOT_TEST_PLANNER_KEY"}
 
     def plan(self, call):
-        with patch.dict(os.environ, {"TEAMBLOCKS_TEST_PLANNER_KEY": "unit-test-only-not-a-provider-key"}):
+        with patch.dict(os.environ, {"KNOT_TEST_PLANNER_KEY": "unit-test-only-not-a-provider-key"}):
             return plan_workflow(self.workflow["project"], self.workflow["resources"], self.planner, model_call=call)
 
     def test_absent_key_is_explicit_and_never_calls_model(self):
@@ -140,7 +140,7 @@ class PlannerTests(unittest.TestCase):
         draft["nodes"] = [node for node in draft["nodes"] if node["id"] != "resources"]
         draft["edges"] = [edge for edge in draft["edges"] if "resources" not in (edge["source"], edge["target"])]
         draft["edges"].append({"id": "start-parallel", "source": "start", "target": "parallel", "kind": "control", "source_port": "out", "target_port": "in"})
-        with patch.dict(os.environ, {"TEAMBLOCKS_TEST_PLANNER_KEY": "unit-test-only-not-a-provider-key"}):
+        with patch.dict(os.environ, {"KNOT_TEST_PLANNER_KEY": "unit-test-only-not-a-provider-key"}):
             result = plan_workflow(draft["project"], [], self.planner, model_call=lambda *_a, **_k: {"content": json.dumps(draft)})
         self.assertTrue(all(agent["model"] == "" and agent["role"] and agent["system_prompt"] for agent in result["agents"]))
         self.assertEqual(set(result), {"schema_version", "project", "agents", "nodes", "edges", "resources", "limits", "viewport", "design_notes"})
@@ -260,7 +260,7 @@ class HTTPTests(unittest.TestCase):
 
     def test_planner_error_payload_redacts_all_issue_fields(self):
         fixture_secret = "unit-test-redact-custom-planner-secret"
-        with patch.dict(os.environ, {"TEAMBLOCKS_TEST_PLANNER_KEY": fixture_secret}), patch("server.plan_workflow", side_effect=PlanningError(fixture_secret, status=422, issues=[{"message": fixture_secret}])):
+        with patch.dict(os.environ, {"KNOT_TEST_PLANNER_KEY": fixture_secret}), patch("server.plan_workflow", side_effect=PlanningError(fixture_secret, status=422, issues=[{"message": fixture_secret}])):
             with self.assertRaises(urllib.error.HTTPError) as context:
                 self.post("/api/plan", {})
             response = context.exception.read().decode()

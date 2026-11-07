@@ -14,7 +14,7 @@ export default defineConfig({
   expect: { timeout: 10000 },
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: process.env.TEAMBLOCKS_URL || 'http://127.0.0.1:5173',
+    baseURL: process.env.KNOT_URL || 'http://127.0.0.1:5173',
     viewport: { width: 1600, height: 1000 },
     browserName: 'chromium',
     launchOptions: { executablePath: chrome },

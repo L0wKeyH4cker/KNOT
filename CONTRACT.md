@@ -1,4 +1,4 @@
-# TeamBlocks shared implementation contract
+# KNOT shared implementation contract
 
 Schema version: `1.0`. All interfaces use the same JSON document.
 

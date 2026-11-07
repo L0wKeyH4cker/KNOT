@@ -7,8 +7,8 @@ from backend.template import load_template
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export the clearly labelled TeamBlocks demo template")
-    parser.add_argument("--output", default="artifacts/teamblocks-demo.zip")
+    parser = argparse.ArgumentParser(description="Export the clearly labelled KNOT demo template")
+    parser.add_argument("--output", default="artifacts/knot-demo.zip")
     args = parser.parse_args()
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

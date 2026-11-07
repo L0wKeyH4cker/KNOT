@@ -1,4 +1,4 @@
-"""Loopback-only TeamBlocks HTTP API and production asset server (stdlib)."""
+"""Loopback-only KNOT HTTP API and production asset server (stdlib)."""
 from __future__ import annotations
 
 import argparse
@@ -42,7 +42,7 @@ def safe_error(message):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "TeamBlocks/1.0"
+    server_version = "KNOT/1.0"
 
     def log_message(self, format, *args):
         # Do not log URLs/bodies/credentials. Only method, status and timing belong in diagnostics.
@@ -96,7 +96,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 allowed = False
             if not allowed:
-                self.send_json(403, {"error": "只允许本地 TeamBlocks 编辑器访问。"})
+                self.send_json(403, {"error": "只允许本地 KNOT 编辑器访问。"})
                 return
         if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/json":
             self.send_json(415, {"error": "请发送 JSON 请求。"})
@@ -122,7 +122,7 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError("运行模式只能是 mock 或 real。")
                     self.send_json(200, {"issues": validate_workflow(workflow, mode=mode)})
                 else:
-                    self.send_bytes(200, build_bundle(workflow), "application/zip", {"Content-Disposition": 'attachment; filename="teamblocks-workflow.zip"'})
+                    self.send_bytes(200, build_bundle(workflow), "application/zip", {"Content-Disposition": 'attachment; filename="knot-workflow.zip"'})
             elif path == "/api/plan":
                 workflow = plan_workflow(body.get("project"), body.get("resources", []), body.get("planner"))
                 self.send_json(200, {"workflow": workflow})
@@ -148,12 +148,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="TeamBlocks local API and static server")
+    parser = argparse.ArgumentParser(description="KNOT local API and static server")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     load_environment()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"TeamBlocks API: http://127.0.0.1:{args.port}", flush=True)
+    print(f"KNOT API: http://127.0.0.1:{args.port}", flush=True)
     print("Real planning uses local environment credentials. No key values are returned to the browser.", flush=True)
     try:
         server.serve_forever()

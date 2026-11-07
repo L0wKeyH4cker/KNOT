@@ -41,7 +41,7 @@ def workflow(review=True):
     else:
         edges.append(edge("join", "output"))
     return {"schema_version": "1.0", "project": {"id": "project", "name": "Test project", "goal": "Test the workflow", "deliverable": "Report", "members": [{"id": "member", "name": "Member A", "skills": ""}]},
-            "agents": [{"id": "agent", "name": "Agent", "role": "Researcher", "system_prompt": "Be accurate", "provider": "openai", "model": "", "credential_ref": "TEAMBLOCKS_TEST_KEY", "tools": []}],
+            "agents": [{"id": "agent", "name": "Agent", "role": "Researcher", "system_prompt": "Be accurate", "provider": "openai", "model": "", "credential_ref": "KNOT_TEST_KEY", "tools": []}],
             "nodes": nodes, "edges": edges, "resources": [], "limits": {"max_concurrency": 2, "timeout_seconds": 5, "max_retries": 0, "max_tool_rounds": 2}, "viewport": {"x": 0, "y": 0, "zoom": 1}, "design_notes": []}
 
 
@@ -216,9 +216,9 @@ class RuntimeTests(unittest.TestCase):
 
 class ProviderTests(unittest.TestCase):
     def setUp(self):
-        self.env = patch.dict(os.environ, {"TEAMBLOCKS_TEST_KEY": "fixture-secret-never-a-real-api-key"})
+        self.env = patch.dict(os.environ, {"KNOT_TEST_KEY": "fixture-secret-never-a-real-api-key"})
         self.env.start()
-        self.agent = {"provider": "openai", "model": "fixture-model", "credential_ref": "TEAMBLOCKS_TEST_KEY"}
+        self.agent = {"provider": "openai", "model": "fixture-model", "credential_ref": "KNOT_TEST_KEY"}
 
     def tearDown(self):
         self.env.stop()
@@ -314,7 +314,7 @@ class HTTPProviderTests(unittest.TestCase):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.base = f"http://127.0.0.1:{self.server.server_port}"
-        self.env = patch.dict(os.environ, {"TEAMBLOCKS_TEST_KEY": "loopback-fixture-key-not-a-real-secret"})
+        self.env = patch.dict(os.environ, {"KNOT_TEST_KEY": "loopback-fixture-key-not-a-real-secret"})
         self.env.start()
         root = Path(__file__).resolve().parents[1] / ".test-tmp"
         root.mkdir(exist_ok=True)
@@ -353,7 +353,7 @@ class HTTPProviderTests(unittest.TestCase):
                 self.assertFalse(record["has_anthropic_auth"])
 
     def test_slow_drip_http_body_obeys_overall_deadline(self):
-        agent = {"provider": "openai", "model": "fixture", "credential_ref": "TEAMBLOCKS_TEST_KEY", "base_url": self.base + "/slow"}
+        agent = {"provider": "openai", "model": "fixture", "credential_ref": "KNOT_TEST_KEY", "base_url": self.base + "/slow"}
         started = time.monotonic()
         with self.assertRaises(ProviderError):
             complete(agent, "system", "prompt", timeout=0.3)
