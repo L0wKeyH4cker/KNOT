@@ -368,37 +368,49 @@ export default function App() {
       setHistoryTick((x) => x + 1);
     }
   }, []);
+  const persistCurrent = useCallback(() => {
+    const workflow = current.current;
+    if (tourSnapshot.current || workflow === lastPersisted.current) return;
+    try {
+      assertSafeWorkflow(workflow);
+      archiveTourProjects();
+      writeCurrentProject(localStorage, workflow, !projectTab);
+      lastPersisted.current = workflow;
+      if (
+        projectTab &&
+        new URLSearchParams(window.location.search).get(PROJECT_QUERY) !== workflow.project.id
+      ) {
+        window.history.replaceState(
+          null,
+          '',
+          projectHref(
+            window.location.pathname,
+            window.location.search,
+            workflow.project.id,
+            window.location.hash,
+          ),
+        );
+      }
+      setSavedStatus('Saved on this device');
+    } catch {
+      setSavedStatus('Not saved · storage unavailable');
+    }
+  }, [archiveTourProjects]);
   useEffect(() => {
     if (tourSnapshot.current) return;
-    const timer = setTimeout(() => {
-      if (tourSnapshot.current) return;
-      try {
-        assertSafeWorkflow(wf);
-        archiveTourProjects();
-        writeCurrentProject(localStorage, wf, !projectTab);
-        lastPersisted.current = wf;
-        if (
-          projectTab &&
-          new URLSearchParams(window.location.search).get(PROJECT_QUERY) !== wf.project.id
-        ) {
-          window.history.replaceState(
-            null,
-            '',
-            projectHref(
-              window.location.pathname,
-              window.location.search,
-              wf.project.id,
-              window.location.hash,
-            ),
-          );
-        }
-        setSavedStatus('Saved on this device');
-      } catch {
-        setSavedStatus('Not saved · storage unavailable');
-      }
-    }, 300);
+    const timer = setTimeout(persistCurrent, 300);
     return () => clearTimeout(timer);
-  }, [wf, tourStep, archiveTourProjects]);
+  }, [wf, tourStep, persistCurrent]);
+  useEffect(() => {
+    // A reload or tab close can happen before the debounced autosave runs.
+    // Flush synchronously without writing the temporary guided-tour example.
+    window.addEventListener('beforeunload', persistCurrent);
+    window.addEventListener('pagehide', persistCurrent);
+    return () => {
+      window.removeEventListener('beforeunload', persistCurrent);
+      window.removeEventListener('pagehide', persistCurrent);
+    };
+  }, [persistCurrent]);
   useEffect(() => {
     api<{
       ok: boolean;

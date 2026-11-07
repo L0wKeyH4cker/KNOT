@@ -185,6 +185,23 @@ test('malformed libraries are never silently replaced by an open or delete actio
   assert.deepEqual(storage.values, before);
 });
 
+test('a damaged library does not hide a valid older current project or allow unrelated fallback', () => {
+  const current = project('recoverable-current');
+  for (const damaged of ['{broken library', '{}', '[{"not":"a workflow"}]']) {
+    const storage = memoryStorage({
+      [KNOT_STORAGE]: JSON.stringify(current),
+      [KNOT_LIBRARY]: damaged,
+    });
+    const before = new Map(storage.values);
+    assert.equal(storage.getItem(projectDraftKey(current.project.id)), null);
+    assert.deepEqual(findProject(storage, current.project.id), current);
+    assert.equal(findProject(storage, 'some-other-project'), null);
+    assert.throws(() => saveLibraryProject(storage, current));
+    assert.throws(() => deleteLibraryProject(storage, current.project.id));
+    assert.deepEqual(storage.values, before);
+  }
+});
+
 test('corrupt or mismatched drafts fall back to the correct saved project', () => {
   const a = project('a');
   const storage = memoryStorage({

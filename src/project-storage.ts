@@ -44,8 +44,13 @@ export function findProject(storage: ReadStorage, id: string): Workflow | null {
   if (!id || isProjectDeleted(storage, id)) return null;
   const latest = draft(storage, id);
   if (latest) return latest;
-  const saved = snapshots(storage).find((project) => project.project.id === id);
-  if (saved) return saved;
+  try {
+    const saved = snapshots(storage).find((project) => project.project.id === id);
+    if (saved) return saved;
+  } catch {
+    // A damaged library must not hide a valid pre-upgrade current project.
+    // Mutating library operations still reject it instead of replacing its data.
+  }
   const current = parseStored(storage.getItem(KNOT_STORAGE));
   return current?.project.id === id ? current : null;
 }
