@@ -176,41 +176,86 @@ Project: **{workflow['project']['name']}**
 
 This ZIP contains your reviewed workflow and a local scheduler. Coding agents write and run the project on your computer. It does not need the KNOT editor or server after download.
 
-## Start
-
-1. Install Python 3.10+ and your chosen local coding CLI. Set up that CLI's supported authentication on this computer:
-   - Codex: https://developers.openai.com/codex/cli/
-   - Claude Code: https://code.claude.com/docs/en/setup
-2. Extract this ZIP into a new folder. Add any existing project files to `workspace/` and provide missing resources listed below.
-3. Double-click `start.bat` on Windows, or run `sh start.sh` on macOS/Linux. The launcher starts real local agents, not a mock run.
-4. Follow the live terminal dashboard: task states, elapsed time, commands, file changes, and recent activity. When a Human Review gate pauses, inspect the drafts and approve, reject, or leave it paused.
-
 Selected backend: **{backend}**
 Shared model: **{model}**
 
-All roles inherit this one choice and run in separate sessions. Blank per-agent API models in `workflow.json` do not block local Codex/Claude execution. The CLI must be installed and authenticated; a web chat subscription alone is not a local execution environment. Requests use the CLI's configured account and may consume its quota or API credits.
+## 1. Prepare the folder
 
-To choose a different backend/model later, run `python run.py --configure` before starting a new run. Configuration is saved in `knot.json`, never in the role prompts. No credentials from the export machine are included.
+Install Python 3.10+ and your chosen coding CLI, and complete that CLI's authentication on this computer: [Codex setup](https://developers.openai.com/codex/cli/) or [Claude Code setup](https://code.claude.com/docs/en/setup).
 
-## Commands
+Extract this ZIP into a **new folder**. Put any existing project code in `workspace/` and provide the resources listed under **Inputs you must provide** below. Find `knot.cmd`, `knot.sh`, and `workflow.json` in the extracted folder.
 
-```sh
-python run.py --interactive
-python run.py --backend codex --validate
-python run.py --backend claude --model YOUR_MODEL
-python knot.py monitor
-python knot.py status
+## 2. Start the tasks
+
+### Windows PowerShell
+
+Open the extracted folder in File Explorer. Click its address bar, type `powershell`, and press Enter. Run:
+
+```powershell
+.\\knot.cmd run --interactive
 ```
 
-`--validate` checks the workflow and local CLI availability without asking a model to work. Authentication and provider availability are only established by an actual CLI request. No local coding run was verified when this package was exported.
+### macOS / Linux
 
-## Terminal monitor
+Open Terminal and enter the extracted folder. Replace the path below with your folder's path, then run:
 
-Local runs automatically show a live dashboard in an interactive terminal. Use Up/Down or j/k to select a task, Tab or n/p to switch projects, and q to hide the dashboard while execution continues. Ctrl+C in the runner stops its local coding processes. `python run.py --plain` keeps scrolling logs instead.
+```sh
+cd "/path/to/extracted-folder"
+sh knot.sh run --interactive
+```
 
-To watch all registered KNOT projects on this computer, open another terminal and run `python knot.py monitor` (Windows shortcut: `.\\knot.cmd monitor`; macOS/Linux: `sh knot.sh monitor`). The monitor only observes: closing it does not stop jobs, launch agents, or approve reviews. `python knot.py run --interactive` starts this package's workflow.
+**One run command dispatches the canvas tasks automatically.** KNOT reads the backend selected during export from `knot.json`. If no backend was selected, it asks once and remembers your choice. Each Agent gets its own role, task context, and working copy. Independent tasks run in parallel; dependent tasks wait for their inputs. One model can serve every role.
 
-`python knot.py status` prints one snapshot; add `--json` for a machine-readable summary. Older or unregistered folders can be added explicitly: `python knot.py monitor --root "PATH TO RUNNER"`. Older packages can only show events they already recorded; re-export to get detailed live activity.
+The runner shows a live dashboard. **Keep this runner terminal open while the tasks work**, including when you open a separate monitor. You can also start tasks by double-clicking `start.bat` on Windows or running `sh start.sh` on macOS/Linux.
+
+**Python not found?** Install Python 3.10+, or activate an existing Conda environment: run `conda env list`, then `conda activate YOUR_ENV_NAME`, replacing `YOUR_ENV_NAME` with your own Python 3.10+ environment name. Retry the run command. Activate the same environment in a new monitor terminal if needed. The `knot.cmd` and `knot.sh` shortcuts select an available Python interpreter for you.
+
+## 3. Watch progress in another terminal
+
+Open a **second terminal in the same extracted folder** and run the command for your operating system:
+
+**Windows PowerShell**
+
+```powershell
+.\\knot.cmd monitor
+```
+
+**macOS / Linux**
+
+```sh
+sh knot.sh monitor
+```
+
+This dashboard shows all registered KNOT projects on this computer, including each task's state, elapsed time, commands, file changes, and recent activity. **The monitor only observes. It does not start or dispatch tasks.** Use the run command in step 2 to start work.
+
+- Up/Down or j/k selects a task. Tab or n/p switches projects.
+- Press q to hide a dashboard while the Agents continue working.
+- Ctrl+C or closing the **separate monitor terminal** only closes the monitor.
+- **Ctrl+C in the runner terminal stops its local coding processes.** Keep that terminal open until work finishes or pauses for review.
+- For one status snapshot, use `.\\knot.cmd status` on Windows or `sh knot.sh status` on macOS/Linux.
+
+## 4. Review and collect the results
+
+At a Human Review gate, return to the **runner terminal**, inspect the drafts at the displayed paths, and enter `approve`, `reject`, or `later`. Enter alone also leaves the workflow paused. To return to a saved review later, repeat the same `run --interactive` command from step 2. Completed tasks will not run again.
+
+An Output node delivers project files to `results/project/` and the canvas's mapped reports to `results/`. Task drafts remain in `.knot/tasks/` before approval. The monitor cannot approve a review for you.
+
+## Optional commands
+
+| Action | Windows PowerShell | macOS / Linux |
+| --- | --- | --- |
+| Change backend/model before a new run | `.\\knot.cmd run --configure` | `sh knot.sh run --configure` |
+| Check configuration and CLI availability | `.\\knot.cmd run --validate` | `sh knot.sh run --validate` |
+| Use scrolling logs | `.\\knot.cmd run --interactive --plain` | `sh knot.sh run --interactive --plain` |
+| Print a JSON status snapshot | `.\\knot.cmd status --json` | `sh knot.sh status --json` |
+
+If Python is already available directly, `python knot.py run --interactive` and `python knot.py monitor` are equivalent entry points. `--validate` does not ask a model to work; authentication and model availability require an actual CLI request. No local coding run was verified when this package was exported.
+
+All roles share the choice in `knot.json`; blank per-agent API models in `workflow.json` do not block local execution. The CLI must be installed and authenticated. Requests use its configured account and may consume its quota or API credits. No credentials from the export machine are included.
+
+## Monitor details
+
+Older or unregistered folders can be added explicitly: `python knot.py monitor --root "PATH TO RUNNER"`. Older packages can only show events they already recorded; re-export to get detailed live activity.
 
 The dashboard shows completed task counts rather than an estimated model percentage. Commands and file activity appear when the coding CLI emits them; quiet periods show time since the last event. Lost heartbeats are marked OFFLINE, not complete. Human Review remains in the runner terminal.
 
@@ -239,7 +284,7 @@ The local task timeout is {execution['task_timeout_seconds']} seconds. The selec
 
 ## Human review and continuation
 
-An unattended run exits with code **2** while waiting for human review. Use `python run.py --interactive` to review a saved pause, or use the exact approval command printed by the runner. The reviewer ID records local acknowledgement, not remote identity verification. No task may approve its own work on the user's behalf.
+An unattended run exits with code **2** while waiting for human review. Return with the interactive run command in step 2, or use the exact approval command printed by the runner. The reviewer ID records local acknowledgement, not remote identity verification. No task may approve its own work on the user's behalf.
 
 Keep `workflow.json` and the execution configuration unchanged when resuming a saved run. This version resumes saved Human Review pauses only. After a failed or interrupted run, preserve its logs/drafts and start from a fresh extracted folder; it does not automatically resume a partially completed coding session. Existing state is not silently overwritten.
 

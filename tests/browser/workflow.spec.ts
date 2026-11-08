@@ -354,6 +354,93 @@ test('template exports from browser and keeps review before delivery; no browser
   expect(errors).toEqual([]);
 });
 
+test('export instructions copy platform commands without starting work and fit small screens', async ({
+  page,
+}) => {
+  const exports: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/export')) exports.push(request.url());
+  });
+  await page.addInitScript(() => {
+    (window as any).__copiedCommands = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          (window as any).__copiedCommands.push(value);
+        },
+      },
+    });
+  });
+  await openTemplate(page);
+  await page.getByRole('button', { name: 'Export runner', exact: true }).click();
+  const guide = page.getByRole('region', { name: 'Run on your computer' });
+  await expect(guide).toBeVisible();
+  await guide.getByRole('button', { name: 'Windows · PowerShell', exact: true }).click();
+  await expect(guide.locator('.export-command code').first()).toHaveText(
+    '.\\knot.cmd run --interactive',
+  );
+  await guide.getByRole('button', { name: 'Copy start command' }).click();
+  await expect(guide.getByRole('status')).toContainText('Start command copied');
+  await guide.getByRole('button', { name: 'Copy monitor command' }).click();
+  await guide.getByRole('button', { name: 'macOS / Linux', exact: true }).click();
+  await expect(guide.locator('.export-command code').first()).toHaveText(
+    'sh knot.sh run --interactive',
+  );
+  await guide.getByRole('button', { name: 'Copy start command' }).click();
+  await guide.getByRole('button', { name: 'Copy monitor command' }).click();
+  expect(await page.evaluate(() => (window as any).__copiedCommands)).toEqual([
+    '.\\knot.cmd run --interactive',
+    '.\\knot.cmd monitor',
+    'sh knot.sh run --interactive',
+    'sh knot.sh monitor',
+  ]);
+  expect(exports).toEqual([]);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async () => {
+          throw new Error('Clipboard permission denied');
+        },
+      },
+    });
+  });
+  await guide.getByRole('button', { name: 'Copy start command' }).click();
+  await expect(guide.getByRole('status')).toContainText('copy it manually');
+  await guide.getByRole('button', { name: 'Windows · PowerShell', exact: true }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download agent workspace', exact: true }).click();
+  await download;
+  await expect(page.getByText('Your agents have their assignments.')).toBeVisible();
+  await expect(guide.locator('.export-command code').first()).toHaveText(
+    '.\\knot.cmd run --interactive',
+  );
+  await expect(guide).toContainText('This only watches progress. It does not start another run.');
+  for (const width of [1280, 768, 360]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await guide.getByRole('button', { name: 'Copy monitor command' }).scrollIntoViewIfNeeded();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    expect(
+      await guide
+        .locator('code')
+        .first()
+        .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+    ).toBeGreaterThanOrEqual(16);
+    const bounds = await guide.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: resolve(artifactDir, `export-commands-${width}.png`),
+      fullPage: true,
+    });
+  }
+  await page.getByRole('button', { name: 'Back to canvas', exact: true }).click();
+  await expect(page.locator('.block-card')).toHaveCount(8);
+});
+
 test('DeepSeek setup saves credentials separately and tests the selected compatible connection (API fixtures)', async ({
   page,
 }) => {

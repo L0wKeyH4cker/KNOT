@@ -6,48 +6,86 @@
 
 升级到 KNOT 后，浏览器内旧版保存的项目和项目库会自动迁移，已有的新存档不会被覆盖。
 
-## 终端监控
-
-本地运行现在自带实时终端看板：查看哪些项目正在运行、各个 Agent 的任务状态与耗时，以及正在执行的命令、修改的文件和最近活动。多个项目共享一个监控入口，不需要启动网页或安装额外 Python 包。
-
-在新版导出包内运行 `start.bat` / `sh start.sh`，本地任务会自动显示看板。也可以另开终端：
-
-```powershell
-# Windows：查看本机已注册的 KNOT 项目
-.\knot.cmd monitor
-# 从客户端启动当前包的任务
-.\knot.cmd run --interactive
-# 只打印一次状态
-.\knot.cmd status
-```
-
-跨平台命令是 `python knot.py monitor`，macOS/Linux 也可用 `sh knot.sh monitor`。上下箭头或 j/k 选择任务，Tab 或 n/p 切换项目，q 关闭看板但任务继续。独立监控窗口关闭不会停止 Agent；运行窗口的 Ctrl+C 会停止它启动的本地编程进程。`python run.py --plain` 保留滚动日志。人工审核仍需在运行窗口明确批准。
-
-旧运行包可用 `python knot.py monitor --root "旧运行包路径"` 查看已记录的状态；要看到命令和文件的实时活动，需要重新导出新版 ZIP。界面显示完成任务数和距上次活动的时间，静默或连接断开不会被当作任务完成。
-
-运行发现只在本机保存目录指针和心跳：Windows 位于 `%LOCALAPPDATA%/KNOT/runs`，macOS/Linux 位于 `$XDG_STATE_HOME/knot/runs`（默认 `~/.local/state/knot/runs`），可用 `KNOT_RUNS_DIR` 改位置。不扫描全盘、不上传日志；进度摘要不含任务提示词、结果正文、命令输出和模型私有推理，并过滤凭据及终端控制符。
-
-## 导出本地 Agent 工作环境
+## 下载并运行本地 Agent 工作包
 
 1. 在画板上确认任务和连接，点击 **Export runner**。
 2. 在 **Run with** 选择 **Codex** 或 **Claude**。共享模型可以留空，使用本地 CLI 的默认模型；无需为每个角色填写模型或密钥。
 3. 点击 **Download agent workspace**，解压到新目录。用户电脑需要 Python 3.10+，以及已安装、完成认证的对应 CLI：[Codex 安装说明](https://developers.openai.com/codex/cli/)、[Claude Code 安装说明](https://code.claude.com/docs/en/setup)。
-4. 如有初始项目代码，放入 `workspace/`。Windows 双击 `start.bat`，macOS/Linux 执行 `sh start.sh`。没有预先选择运行方式的包会在首次启动时询问并记住选择。
-5. 查看任务进度，在人工审核处检查草稿并作出决定。Output 节点将项目文件交付到 `results/project/`，画板配置的报告仍放在 `results/`。
+4. 如有初始项目代码，放入 `workspace/`；按包内 **Inputs you must provide** 补齐资料。接下来按操作系统启动任务。
+
+### Windows：启动任务
+
+在资源管理器进入解压后的文件夹，确认能看到 `knot.cmd` 和 `workflow.json`。点击地址栏，输入 `powershell` 后按 Enter，再执行：
+
+```powershell
+.\knot.cmd run --interactive
+```
+
+### macOS / Linux：启动任务
+
+打开终端，进入解压后的文件夹；把下面第一行的路径换成自己的路径：
+
+```sh
+cd "/path/to/extracted-folder"
+sh knot.sh run --interactive
+```
+
+**运行一次就会自动派发画板上的任务。** 启动器读取导出时保存的 Codex/Claude 选择，为每个 Agent 建立独立任务上下文；能并行的任务同时执行，依赖其他任务的工作会等待结果。不需要逐个打开 Agent 或复制任务说明。没有预先选择的包会询问一次并记住选择。
+
+运行窗口会显示实时看板。**任务执行期间保持这个窗口打开**；打开监控窗口后也不要关闭它。Windows 也可以双击 `start.bat`，macOS/Linux 可以运行 `sh start.sh`，同样会启动任务。
+
+如果提示找不到 Python，请先安装 Python 3.10+；已安装 Conda 的用户可以运行 `conda env list`，再执行 `conda activate YOUR_ENV_NAME`（将 `YOUR_ENV_NAME` 换成自己的 Python 3.10+ 环境名），然后重试上面的启动命令。使用 Conda 时，新的监控窗口也应激活相同环境。`knot.cmd` / `knot.sh` 会选择可用的 Python，无需手动填写解释器路径。
+
+### 另开一个终端：查看所有项目的进度
+
+新开终端并进入同一个解压目录，再执行对应命令：
+
+**Windows PowerShell**
+
+```powershell
+.\knot.cmd monitor
+```
+
+**macOS / Linux**
+
+```sh
+sh knot.sh monitor
+```
+
+`monitor` 只查看本机已注册项目的状态；**它不会启动或派发任务**。先执行上面的 `run --interactive` 才会开始工作。看板展示任务状态、耗时、命令、文件改动和最近活动；多个项目可以在同一个看板切换。
+
+- 上下箭头或 `j` / `k` 选择任务，Tab 或 `n` / `p` 切换项目。
+- 按 `q` 隐藏看板，Agent 继续运行。独立监控窗口按 `Ctrl+C` 或关闭窗口也不会停止任务。
+- **在运行窗口按 `Ctrl+C` 会停止它启动的本地 Agent。**
+- 只想看一次状态，用 `.\knot.cmd status` 或 `sh knot.sh status`。
+
+### 人工审核与结果
+
+到达 Human Review 节点后，回到**运行窗口**检查草稿，输入 `approve` 批准、`reject` 拒绝，或 `later` 保持暂停。按 Enter 也只会保持暂停。之后可再次执行同一条 `run --interactive` 命令处理已保存的审核，已完成的任务不会重跑。
+
+Output 节点将项目文件交付到 `results/project/`，画板配置的报告放在 `results/`。审核前的草稿保留在 `.knot/tasks/`，运行窗口会提示具体路径。
+
+### 调整运行方式与监控说明
+
+更换统一执行方式、只检查配置或改用滚动日志：
+
+| 操作 | Windows PowerShell | macOS / Linux |
+| --- | --- | --- |
+| 更换运行方式 | `.\knot.cmd run --configure` | `sh knot.sh run --configure` |
+| 只检查配置和 CLI | `.\knot.cmd run --validate` | `sh knot.sh run --validate` |
+| 使用滚动日志 | `.\knot.cmd run --interactive --plain` | `sh knot.sh run --interactive --plain` |
+
+`--configure` 在开始新一次运行前使用；`--validate` 不调用模型，认证和实际模型可用性仍需真实调用确认。已能直接使用 Python 的用户也可以运行 `python knot.py run --interactive` / `python knot.py monitor`。旧的 `--mode mock` 与 `--mode real` 保留为显式高级模式。
+
+旧运行包可用 `python knot.py monitor --root "旧运行包路径"` 查看已记录的状态；要看到命令和文件的实时活动，需要重新导出新版 ZIP。界面显示完成任务数和距上次活动的时间，静默或连接断开不会被当作任务完成。
+
+运行发现只在本机保存目录指针和心跳：Windows 位于 `%LOCALAPPDATA%/KNOT/runs`，macOS/Linux 位于 `$XDG_STATE_HOME/knot/runs`（默认 `~/.local/state/knot/runs`），可用 `KNOT_RUNS_DIR` 改位置。不扫描全盘、不上传日志；进度摘要不含任务提示词、结果正文、命令输出和模型私有推理，并过滤凭据及终端控制符。
 
 `knot.json` 保存统一执行配置，`workflow.json` 保留原画板；`tasks/` 和 `prompts/` 是可读的任务说明，`AGENTS.md` / `CLAUDE.md` 方便编程助手接手。任务各自拥有工作副本，独立任务按画板并发上限执行。执行连线只控制先后，数据连线才传递上游结果和代码改动。文件冲突会明确停止相关任务，不会自动覆盖。
 
 源码交接限制为单文件 16 MiB、总计 128 MiB、最多 5,000 个文件；不适合把大型数据集、权重或依赖目录作为源码交接。当前恢复功能覆盖人工审核暂停；失败或中断的编程会话尚不支持自动恢复，应保留日志和草稿，在新解压目录重新开始。
 
 启动器默认运行真实本地 Agent；缺少 CLI、认证或输入资料时停止并说明原因，不会退回 mock。账号额度与模型权限由用户的 CLI 配置提供，网页版聊天本身不代表具备本地执行能力。工作副本用于隔离并行改动，不是操作系统沙箱；命令权限由所选 CLI 执行。ZIP 不携带开发机器上的凭证。
-
-```sh
-python run.py --interactive
-python run.py --configure
-python run.py --backend codex --validate
-```
-
-`--configure` 更换统一执行方式，`--validate` 只检查结构和 CLI 可用性，不调用模型；认证和实际模型可用性仍需真实调用确认。旧的 `--mode mock` 与 `--mode real` 保留为显式高级模式。
 
 ## 启动项目
 

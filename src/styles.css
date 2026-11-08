@@ -1644,14 +1644,14 @@ kbd {
   margin: 8px auto 20px;
 }
 .exported-content h3 {
-  font-size: 20px;
+  font-size: 26px;
   letter-spacing: -0.5px;
 }
 .exported-content > p {
-  font-size: 14px;
-  color: #99a58c;
+  font-size: 16px;
+  color: #66755e;
   line-height: 1.9;
-  max-width: 440px;
+  max-width: 620px;
   margin: 12px auto 25px;
 }
 .export-steps {
@@ -1665,26 +1665,30 @@ kbd {
   gap: 15px;
   margin: 22px 0;
 }
+.export-steps li > div {
+  flex: 1;
+  min-width: 0;
+}
 .export-steps li > span {
-  width: 27px;
-  height: 27px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: #f0f4e6;
-  color: #95aa76;
-  font-size: 14px;
+  color: #526b37;
+  font-size: 16px;
   flex-shrink: 0;
 }
 .export-steps strong {
-  font-size: 14px;
-  font-weight: 550;
+  font-size: 18px;
+  font-weight: 600;
 }
 .export-steps p {
-  font-size: 14px;
-  color: #9ca88f;
-  line-height: 1.8;
-  margin-top: 5px;
+  font-size: 16px;
+  color: #66755e;
+  line-height: 1.65;
+  margin-top: 8px;
 }
 .exported-content .note {
   text-align: left;
@@ -1709,6 +1713,84 @@ kbd {
 }
 .workspace-export-form .note {
   font-size: 15px;
+}
+.export-run-guide {
+  margin-top: 30px;
+  padding-top: 28px;
+  border-top: 1px solid #e0e6d8;
+  text-align: left;
+}
+.export-run-guide h4 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  margin: 0 0 18px;
+}
+.export-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.export-platforms button {
+  padding: 11px 15px;
+  border: 1px solid #d8e1cf;
+  border-radius: 9px;
+  background: #fff;
+  color: #4b5d41;
+  font-size: 16px;
+}
+.export-platforms button[aria-pressed='true'] {
+  color: #fff;
+  background: #384d37;
+  border-color: #384d37;
+}
+.export-command {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+  margin: 12px 0;
+  border: 1px solid #dce4d4;
+  border-radius: 10px;
+  background: #f3f6ee;
+}
+.export-command code {
+  flex: 1 1 200px;
+  min-width: 0;
+  color: #293c2a;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.export-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid #d0dcc6;
+  border-radius: 7px;
+  background: #fff;
+  color: #384d37;
+  font-size: 15px;
+  min-height: 40px;
+}
+.export-guide-result,
+.export-guide-help,
+.export-copy-feedback {
+  font-size: 16px;
+  line-height: 1.65;
+  color: #526249;
+  margin-top: 16px;
+}
+.export-guide-result code {
+  overflow-wrap: anywhere;
+}
+.export-copy-feedback:empty {
+  display: none;
 }
 .onboarding {
   width: 940px;

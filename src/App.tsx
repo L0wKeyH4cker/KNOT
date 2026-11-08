@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import Home from './Home';
 import BrandLogo from './BrandLogo';
+import ExportRunGuide from './ExportRunGuide';
 import { TOUR_STEPS, readOnboardingStatus, rememberOnboarding } from './onboarding';
 import type { OnboardingStatus } from './onboarding';
 import { usePage } from './navigation';
@@ -1730,37 +1731,6 @@ export default function App() {
                         {execution.model ? ` with ${execution.model}` : ' with its default model'}.
                         Tasks follow the connections and review gates on your canvas.
                       </p>
-                      <ol className="export-steps">
-                        <li>
-                          <span>1</span>
-                          <div>
-                            <strong>Extract to a new folder</strong>
-                            <p>Add any existing project code to workspace/.</p>
-                          </div>
-                        </li>
-                        <li>
-                          <span>2</span>
-                          <div>
-                            <strong>Start your local agents</strong>
-                            <p>Open start.bat on Windows, or run sh start.sh on macOS/Linux.</p>
-                          </div>
-                        </li>
-                        <li>
-                          <span>3</span>
-                          <div>
-                            <strong>Follow progress and review results</strong>
-                            <p>Code is delivered to results/project/ after required reviews.</p>
-                          </div>
-                        </li>
-                      </ol>
-                      <div className="note">
-                        START-HERE.md includes setup steps. Missing tools or sign-in stop the run
-                        with an explanation; they never produce mock results.
-                      </div>
-                      <button className="primary full" onClick={() => setModal(null)}>
-                        Back to canvas
-                        <ArrowRight size={16} />
-                      </button>
                     </>
                   ) : (
                     <form
@@ -1818,6 +1788,13 @@ export default function App() {
                         Download agent workspace
                       </button>
                     </form>
+                  )}
+                  <ExportRunGuide />
+                  {exportDownloaded && (
+                    <button className="primary full" onClick={() => setModal(null)}>
+                      Back to canvas
+                      <ArrowRight size={16} />
+                    </button>
                   )}
                 </div>
               )}
