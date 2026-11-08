@@ -40,7 +40,7 @@
       return {stop, rgb, flatInk};
     });
     let position = 0, velocity = 0, goal = 0, frame = 0, previous = 0;
-    let hovering = false, pointerType = "";
+    let hovering = false, composerHovered = false, pointerType = "";
 
     function draw(position) {
       const t = clamp(position);
@@ -98,6 +98,7 @@
     }
 
     function setGoal(open) {
+      open = open || composerHovered;
       control.setAttribute("aria-pressed", String(open));
       svg.dataset.state = open ? "open" : "tied";
       if (goal === Number(open)) return;
@@ -110,6 +111,11 @@
       }
     }
 
+    // The home composer shares this animation without taking keyboard focus.
+    svg.addEventListener("knot:composer-hover", (e) => {
+      composerHovered = e.detail === true;
+      setGoal(hovering);
+    });
     control.addEventListener("pointerenter", (e) => {
       if (e.pointerType === "touch") return;
       hovering = true;

@@ -45,6 +45,16 @@ export default function Home({
   focusComposer,
 }: Props) {
   const composer = useRef<HTMLTextAreaElement>(null);
+  const motionLogo = useRef<HTMLObjectElement>(null);
+  const composerHovered = useRef(false);
+
+  function syncComposerHover(hovered = composerHovered.current) {
+    composerHovered.current = hovered;
+    motionLogo.current?.contentDocument?.documentElement.dispatchEvent(
+      new CustomEvent('knot:composer-hover', { detail: hovered }),
+    );
+  }
+
   useEffect(() => {
     if (focusComposer) composer.current?.focus();
   }, [focusComposer]);
@@ -62,12 +72,14 @@ export default function Home({
         <div className="home-intro">
           <div className="home-symbol">
             <object
+              ref={motionLogo}
               className="home-motion-logo"
               data="/brand/KNOT-motion.svg"
               type="image/svg+xml"
               width="458"
               height="128"
               aria-label="KNOT interactive logo"
+              onLoad={() => syncComposerHover()}
             >
               <BrandLogo />
             </object>
@@ -79,6 +91,12 @@ export default function Home({
 
         <form
           className="idea-composer"
+          onPointerEnter={(event) => {
+            if (event.pointerType !== 'touch') syncComposerHover(true);
+          }}
+          onPointerLeave={(event) => {
+            if (event.pointerType !== 'touch') syncComposerHover(false);
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             onStart(idea.trim());
