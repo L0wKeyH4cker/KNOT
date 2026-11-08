@@ -150,6 +150,19 @@ class LocalLauncherTests(unittest.TestCase):
             self.assertIsNone(run.ask_review(state, self.root))
         self.assertEqual(state['nodes']['review']['status'], 'waiting_review')
 
+    def test_failed_and_review_files_are_labeled_as_drafts(self):
+        for status in ('failed', 'waiting_review', 'completed'):
+            with self.subTest(status=status):
+                state = {'status': status, 'nodes': {}, 'results': {'work': {'data': {'files': ['data.csv']}}}}
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    run.show_state(state, self.root / 'logs/run-state.json', 'local', self.root)
+                if status == 'completed':
+                    self.assertIn('Delivered: data.csv', output.getvalue())
+                else:
+                    self.assertIn('Task file (draft): data.csv', output.getvalue())
+                    self.assertNotIn('Delivered:', output.getvalue())
+
     def test_review_shows_actual_indexed_workspace(self):
         folder = self.root / '.knot/tasks/task-003-work/work'
         folder.mkdir(parents=True)

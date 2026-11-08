@@ -126,7 +126,8 @@ def show_state(state: dict, state_path: Path, mode: str, root: Path) -> None:
     for result in state.get("results", {}).values():
         if isinstance(result.get("data"), dict) and isinstance(result["data"].get("files"), list):
             for name in result["data"]["files"]:
-                print(redact("Delivered: " + str(name)))
+                label = "Delivered: " if state["status"] == "completed" else "Task file (draft): "
+                print(redact(label + str(name)))
     if mode == "local" and state["status"] == "completed":
         project = root / "results" / "project"
         if project.is_dir():
@@ -176,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     display.add_argument("--tui", action="store_true", help="Show the dashboard in a supported interactive terminal (also in explicit mock mode)")
     parser.add_argument("--no-splash", action="store_true", help="Skip the startup logo and open the dashboard immediately")
     parser.add_argument("--resume", action="store_true", help="Resume a saved human-review pause")
+    parser.add_argument("--retry-failed", action="store_true", help="Explicitly retry failed local coding tasks while retaining successful work and old drafts")
     parser.add_argument("--review", help="Waiting Human Review node id")
     parser.add_argument("--decision", choices=("approve", "reject"))
     parser.add_argument("--reviewer", help="Configured human owner's member id")
@@ -183,6 +185,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.mode != "local" and (args.backend is not None or args.model is not None or args.configure):
         parser.error("--backend, --model and --configure apply to --mode local")
+    if args.retry_failed and args.mode != "local":
+        parser.error("--retry-failed applies only to --mode local")
+    if args.retry_failed and (args.resume or args.configure or args.validate):
+        parser.error("--retry-failed cannot be combined with --resume, --configure or --validate")
     if args.configure and (args.resume or args.validate):
         parser.error("--configure cannot be combined with --resume or --validate")
     if args.resume and not all((args.review, args.decision, args.reviewer)):
@@ -197,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         execution = None
         changed = False
         if args.mode == "local":
-            execution, changed = configure_execution(root, args, interactive)
+            execution, changed = configure_execution(root, args, interactive and not args.retry_failed)
         if args.configure:
             save_execution(root, execution)
             print(f"Saved {execution['backend']} for every Agent in knot.json. Model: {execution['model'] or 'assistant default'}.")
@@ -216,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
                     issues.append({"severity": "error", "code": "backend_unavailable", "message": availability.get("message") or availability.get("error") or f"Install {execution['backend']} locally before running."})
             print(json.dumps(redact({"mode": args.mode, "execution": execution, "backend": availability, "issues": issues}), ensure_ascii=False, indent=2))
             return 1 if any(i["severity"] == "error" for i in issues) else 0
-        if changed:
+        if changed and not args.retry_failed:
             save_execution(root, execution)
         if execution:
             print(f"Using {execution['backend']} for all Agents; model: {execution['model'] or 'assistant default'}.")
@@ -234,6 +240,8 @@ def main(argv: list[str] | None = None) -> int:
         state = None
         if args.resume:
             engine.resume(args.review, args.decision, args.reviewer)
+        elif args.retry_failed:
+            engine.retry_failed()
         elif saved is not None:
             if saved.get("workflow_hash") != fingerprint(workflow) or saved.get("mode") != args.mode:
                 raise ValueError("This folder already contains a run of a different workflow or mode. Extract a fresh ZIP for a new run.")
@@ -248,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
                 if saved.get("status") == "waiting_review":
                     print("Run python run.py --interactive to review, or use the explicit --resume command above.")
                     return 2
+                if args.mode == "local" and saved.get("status") == "failed":
+                    raise ValueError("This local run failed. Its logs and drafts are preserved. Use --retry-failed to explicitly retry failed coding tasks, or use a fresh exported folder.")
                 raise ValueError("A run already exists. Its logs and workspaces are preserved. Use a fresh exported folder for a new run.")
         if state is None:
             state = run_engine(engine, args.mode, plain=args.plain, tui=args.tui, splash=not args.no_splash)

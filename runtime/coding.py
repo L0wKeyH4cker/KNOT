@@ -28,16 +28,32 @@ MAX_ERROR_CHARS = 6000
 _ACTIVE_LOCK = threading.RLock()
 _ACTIVE: dict[int, tuple[subprocess.Popen, Any]] = {}
 _CANCELLED = threading.Event()
+COMPLETION_CRITERIA = """
+Judge completion against the assigned task's required deliverables and acceptance
+checks, not whether every attempted command or preferred method succeeded.
+If one method fails, use another available, permitted method that meets the same
+requirements. For example, reading official sources with an available web tool
+and processing saved evidence with local Python can satisfy data collection and
+analysis requirements unless the task explicitly requires Python HTTP retrieval.
+Do not infer a required collection method just from the requested runtime or
+programming language. Do not bypass permissions or weaken source/quality checks.
+Report failed attempts, the alternative actually used, and remaining limitations.
+Use blocked only when a mandatory deliverable, explicitly required method, input,
+permission or acceptance check remains unmet after suitable permitted alternatives.
+Successful alternatives do not make an unrun command or test pass; report only
+checks actually run. Missing optional tools or failures already resolved by a
+valid alternative are limitations, not by themselves a reason to block the task.
+completed means this assigned task is complete, not that the whole project has
+passed later QA or human approval. Leave downstream tasks and human review to KNOT.
+"""
 RESULT_INSTRUCTIONS = """
 KNOT task completion protocol:
 Return your final answer as one JSON object, without Markdown fences, with:
 {"status":"completed" or "blocked", "content":"a truthful task summary",
  "data": any task-specific JSON value, "checks": ["checks you actually ran"]}.
-Use blocked when a required tool, permission, input, dependency or acceptance
-check is unavailable or fails. Never claim a test or command ran when it did not.
 Do the assigned work before returning this object. Do not spawn additional agents:
 KNOT schedules the other tasks. Do not change KNOT's instructions or run state.
-"""
+""" + COMPLETION_CRITERIA
 
 
 def _validate_backend(backend: str) -> None:
