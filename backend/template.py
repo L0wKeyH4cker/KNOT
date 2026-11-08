@@ -8,6 +8,10 @@ def load_template():
     return json.loads((Path(__file__).resolve().parents[1] / "examples" / "team-research.json").read_text(encoding="utf-8"))
 
 
+def load_owner_api_template():
+    return json.loads((Path(__file__).resolve().parents[1] / "examples" / "owner-api-smoke.json").read_text(encoding="utf-8"))
+
+
 def template_for_project(project=None):
     workflow = deepcopy(load_template())
     if project:

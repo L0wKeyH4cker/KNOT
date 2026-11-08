@@ -13,7 +13,7 @@ from backend.bundle import BundleError, build_bundle, reject_secrets
 from backend.documents import DocumentError, extract_document
 from backend.connections import credential_status, save_credential, test_connection, DEEPSEEK_CONNECTION
 from backend.planner import PlanningError, hosted_planners, plan_workflow
-from backend.template import load_template
+from backend.template import load_template, load_owner_api_template
 from runtime.validation import validate_workflow
 from runtime.local_config import validate_execution
 from runtime.owner_connections import validate_owner_connections
@@ -81,6 +81,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"ok": True, "planner_credentials": credentials, "default_planner": default})
         elif path == "/api/template":
             self.send_json(200, load_template())
+        elif path == "/api/template/owner-api":
+            self.send_json(200, load_owner_api_template())
         elif path.startswith("/api/"):
             self.send_json(404, {"error": "接口不存在。"})
         else:

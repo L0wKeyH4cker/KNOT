@@ -21,6 +21,7 @@ type Props = {
   onStart: (idea: string) => void;
   onRequirements: (idea: string) => void;
   onExample: () => void;
+  onOwnerExample: () => void;
   onProjects: () => void;
   onOpen: (project: Workflow) => void;
   onHelp: () => void;
@@ -37,6 +38,7 @@ export default function Home({
   onStart,
   onRequirements,
   onExample,
+  onOwnerExample,
   onProjects,
   onOpen,
   onHelp,
@@ -138,6 +140,17 @@ export default function Home({
               </button>
             </p>
           )}
+          <button
+            className="home-example"
+            aria-label="Test member APIs"
+            disabled={busy}
+            onClick={onOwnerExample}
+          >
+            Test member APIs <ArrowRight size={14} />
+          </button>
+          <p className="owner-example-description">
+            Alice + Bob · separate API keys · one shared result
+          </p>
         </div>
 
         {projects.length > 0 && (
