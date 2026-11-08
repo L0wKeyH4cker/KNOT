@@ -88,7 +88,7 @@ export const KINDS: Record<
   start: {
     name: 'Start',
     description: 'Where your workflow begins',
-    color: '#527951',
+    color: '#4965b0',
     tag: 'TRIGGER',
   },
   agent_task: {
@@ -124,7 +124,7 @@ export const KINDS: Record<
   output: {
     name: 'Output',
     description: 'Turn work into deliverables',
-    color: '#4f9690',
+    color: '#5876bd',
     tag: 'DELIVERY',
   },
 };

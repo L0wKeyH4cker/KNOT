@@ -16,3 +16,23 @@ export default function BrandLogo({ mark = false, decorative = false, className 
     />
   );
 }
+
+export function HomeLogo({ onHome, className = '' }: { onHome?: () => void; className?: string }) {
+  return (
+    <a
+      className={`home-logo-link ${className}`.trim()}
+      href="#"
+      aria-label="KNOT home"
+      onClick={
+        onHome
+          ? (event) => {
+              event.preventDefault();
+              onHome();
+            }
+          : undefined
+      }
+    >
+      <BrandLogo decorative />
+    </a>
+  );
+}

@@ -10,6 +10,7 @@ import {
   CircleAlert,
 } from 'lucide-react';
 import { Field } from './Inspector';
+import LongWaitNotice from './LongWaitNotice';
 import { PlannerSettings } from './Settings';
 import type { Planner } from './Settings';
 import { api } from './model';
@@ -129,6 +130,16 @@ export default function RequirementIntake({
     );
   return (
     <div className="requirements-designer">
+      {phase !== 'idle' && (
+        <LongWaitNotice
+          key={phase}
+          activity={
+            phase === 'extract'
+              ? 'Reading your document.'
+              : 'Your model is analyzing the requirements.'
+          }
+        />
+      )}
       <div className="requirements-intro">
         <h3>Turn requirements into a workflow</h3>
       </div>

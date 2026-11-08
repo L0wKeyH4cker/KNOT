@@ -58,7 +58,7 @@ test('Check and Back preserve the visible example graph and its measurements acr
     .viewport.zoom;
   await page.waitForFunction((initial) => {
     const saved = JSON.parse(localStorage.getItem('knot.current.v1') || 'null');
-    return saved && saved.viewport.zoom !== initial;
+    return saved?.nodes.length === 8 && saved.viewport.zoom !== initial;
   }, initialZoom);
   const before = await exportedWorkflow(page);
   await visibleGraph(page);
