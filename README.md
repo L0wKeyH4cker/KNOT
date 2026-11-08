@@ -34,8 +34,6 @@ sh knot.sh run --interactive
 
 ### OpenCode：按负责人使用连接
 
-想先测试两个用户的连接，在首页点击 **Test member APIs** 打开“双人 API 连通测试”。Alice 和 Bob 并行写入两个小文件，再由 Alice 读取并汇总；详细步骤见 [样例说明](examples/owner-api-smoke.md)。同一台电脑上可用 `python scripts/run_owner_example.py "解压目录"` 直接使用编辑器保存的成员 key，无需再次填写；加 `--validate` 只检查配置，不发起模型调用。
-
 在项目的团队成员设置中，为每位负责人填写服务商、模型和成员专属凭据引用；任务的 **Human owner** 决定使用哪个连接，Agent 的角色与提示词决定如何工作。同一服务商的两位成员也应使用不同引用，避免覆盖彼此的 key。
 
 运行电脑需安装 OpenCode CLI **2.2.6 或以上的 2.x 版本**。已有 npm 时可运行 `npm install -g @opencode/cli@2.2.6`。KNOT 为每项任务启动 `--standalone` 独立实例，使用任务专属的临时配置，结束后清理；不会复用 OpenCode 默认共享后台中的账号。

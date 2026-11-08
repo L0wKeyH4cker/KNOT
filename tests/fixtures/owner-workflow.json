@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0",
+  "project": {
+    "id": "owner-export-fixture",
+    "name": "Owner export fixture",
+    "goal": "Produce two independently assigned files and combine their results.",
+    "deliverable": "Two source files and a combined report.",
+    "members": [
+      {
+        "id": "alice",
+        "name": "Alice",
+        "skills": "Writing and synthesis",
+        "connection": {
+          "provider": "openai",
+          "model": "fixture-alice",
+          "credential_ref": "KNOT_TEST_ALICE_API_KEY",
+          "base_url": "https://provider.example.invalid/v1"
+        }
+      },
+      {
+        "id": "bob",
+        "name": "Bob",
+        "skills": "Writing",
+        "connection": {
+          "provider": "openai",
+          "model": "fixture-bob",
+          "credential_ref": "KNOT_TEST_BOB_API_KEY",
+          "base_url": "https://provider.example.invalid/v1"
+        }
+      }
+    ]
+  },
+  "agents": [
+    {
+      "id": "writer",
+      "name": "Writer",
+      "role": "Write assigned project files",
+      "system_prompt": "Complete the assigned task and verify the resulting files.",
+      "provider": "openai",
+      "model": "",
+      "credential_ref": "OPENAI_API_KEY",
+      "tools": []
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "label": "Start",
+      "position": { "x": 40, "y": 220 },
+      "config": {}
+    },
+    {
+      "id": "parallel",
+      "type": "parallel",
+      "label": "Independent tasks",
+      "position": { "x": 340, "y": 220 },
+      "config": {}
+    },
+    {
+      "id": "alice-write",
+      "type": "agent_task",
+      "label": "Write first file",
+      "position": { "x": 640, "y": 60 },
+      "config": {
+        "agent_id": "writer",
+        "owner_id": "alice",
+        "instructions": "Write and verify alice.txt.",
+        "acceptance": "The file exists and has been checked.",
+        "output_format": "json",
+        "permissions": { "read": [], "write": [] },
+        "tools": [],
+        "join_rule": "all_selected"
+      }
+    },
+    {
+      "id": "bob-write",
+      "type": "agent_task",
+      "label": "Write second file",
+      "position": { "x": 640, "y": 380 },
+      "config": {
+        "agent_id": "writer",
+        "owner_id": "bob",
+        "instructions": "Write and verify bob.txt.",
+        "acceptance": "The file exists and has been checked.",
+        "output_format": "json",
+        "permissions": { "read": [], "write": [] },
+        "tools": [],
+        "join_rule": "all_selected"
+      }
+    },
+    {
+      "id": "alice-join",
+      "type": "agent_task",
+      "label": "Combine files",
+      "position": { "x": 960, "y": 220 },
+      "config": {
+        "agent_id": "writer",
+        "owner_id": "alice",
+        "instructions": "Read both upstream files and write a combined report.",
+        "acceptance": "The report includes both upstream results.",
+        "output_format": "json",
+        "permissions": { "read": [], "write": [] },
+        "tools": [],
+        "join_rule": "all_success"
+      }
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "label": "Deliver files",
+      "position": { "x": 1280, "y": 220 },
+      "config": {
+        "mappings": [
+          { "source_node": "alice-join", "filename": "report.json", "format": "json" }
+        ],
+        "join_rule": "all_success"
+      }
+    }
+  ],
+  "edges": [
+    { "id": "control-start-parallel", "source": "start", "target": "parallel", "source_port": "out", "target_port": "in", "kind": "control" },
+    { "id": "control-parallel-alice", "source": "parallel", "target": "alice-write", "source_port": "out", "target_port": "in", "kind": "control" },
+    { "id": "control-parallel-bob", "source": "parallel", "target": "bob-write", "source_port": "out", "target_port": "in", "kind": "control" },
+    { "id": "control-alice-join", "source": "alice-write", "target": "alice-join", "source_port": "out", "target_port": "in", "kind": "control" },
+    { "id": "control-bob-join", "source": "bob-write", "target": "alice-join", "source_port": "out", "target_port": "in", "kind": "control" },
+    { "id": "data-alice-join", "source": "alice-write", "target": "alice-join", "source_port": "data-out", "target_port": "data-in", "kind": "data" },
+    { "id": "data-bob-join", "source": "bob-write", "target": "alice-join", "source_port": "data-out", "target_port": "data-in", "kind": "data" },
+    { "id": "control-join-output", "source": "alice-join", "target": "output", "source_port": "out", "target_port": "in", "kind": "control" },
+    { "id": "data-join-output", "source": "alice-join", "target": "output", "source_port": "data-out", "target_port": "data-in", "kind": "data" }
+  ],
+  "resources": [],
+  "limits": {
+    "max_concurrency": 2,
+    "timeout_seconds": 180,
+    "max_retries": 0,
+    "max_tool_rounds": 6
+  },
+  "viewport": { "x": 30, "y": 60, "zoom": 0.65 },
+  "design_notes": []
+}

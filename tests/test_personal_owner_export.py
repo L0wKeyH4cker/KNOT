@@ -16,19 +16,16 @@ import zipfile
 from backend.bundle import BundleError, build_bundle
 from backend.connections import saved_member_credentials, save_credential
 from backend.planner import PlanningError
-from backend.template import load_owner_api_template
 from server import Handler, ThreadingHTTPServer, credential_export_allowed
 
-REF_A = "KNOT_DEMO_ALICE_API_KEY"
-REF_B = "KNOT_DEMO_BOB_API_KEY"
+REF_A = "KNOT_TEST_ALICE_API_KEY"
+REF_B = "KNOT_TEST_BOB_API_KEY"
 KEY_A = "fixture-personal-alice-value"
 KEY_B = "fixture-personal-bob-value"
 
 
 def configured_workflow():
-    workflow = load_owner_api_template()
-    for member in workflow["project"]["members"]:
-        member["connection"]["model"] = "fixture-" + member["id"]
+    workflow = json.loads((Path(__file__).resolve().parent / "fixtures/owner-workflow.json").read_text(encoding="utf-8"))
     workflow["project"]["members"].append({"id": "reviewer", "name": "Reviewer", "skills": "",
         "connection": {"provider": "openai", "model": "fixture-reviewer", "credential_ref": "UNUSED_MEMBER_KEY"}})
     workflow["nodes"].append({"id": "review", "type": "human_review", "label": "Review", "position": {"x": 1100, "y": 400},

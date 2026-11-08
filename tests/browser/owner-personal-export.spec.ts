@@ -2,13 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const example = JSON.parse(
-  readFileSync(new URL('../../examples/owner-api-smoke.json', import.meta.url), 'utf8'),
+const configured = JSON.parse(
+  readFileSync(new URL('../fixtures/owner-workflow.json', import.meta.url), 'utf8'),
 );
-const configured = structuredClone(example);
-configured.project.members.forEach((member: any, index: number) => {
-  member.connection.model = `fixture-owner-model-${index + 1}`;
-});
 const refs = configured.project.members.map((member: any) => member.connection.credential_ref);
 
 async function setup(
@@ -171,7 +167,7 @@ test('a missing saved key from the export API shows the member issue without dow
           severity: 'error',
           code: 'owner_credential_not_saved',
           node_id: 'bob-write',
-          message: 'Bob（用户 B）: enter a key and click Save on this device in Team members.',
+          message: 'Bob: enter a key and click Save on this device in Team members.',
         },
       ],
     },

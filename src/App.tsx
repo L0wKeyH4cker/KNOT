@@ -708,16 +708,14 @@ export default function App() {
         void flow.fitView({ padding: 0.2, duration: 0, maxZoom: 1 });
       }),
     );
-  async function loadExample(guided: boolean, kind: 'team' | 'owner-api' = 'team') {
+  async function loadExample(guided: boolean) {
     const request = ++templateRequest.current;
     const source = activePage.current;
     const isCurrentRequest = () =>
       templateRequest.current === request && activePage.current === source;
     setBusy('template');
     try {
-      const value = parseWorkflow(
-        await api<Workflow>(kind === 'owner-api' ? 'template/owner-api' : 'template'),
-      );
+      const value = parseWorkflow(await api<Workflow>('template'));
       if (!isCurrentRequest()) return;
       value.project.id = uid('example');
       if (guided) {
@@ -729,17 +727,12 @@ export default function App() {
         setTourStep(0);
         setToast('');
       } else change(value);
-      if (kind === 'owner-api') setExecution({ backend: 'opencode', model: '' });
       navigate('canvas');
       setSelected(null);
       setEdgeSelected(null);
       if (guided) fitTour();
       else {
-        notify(
-          kind === 'owner-api'
-            ? 'API test loaded. Open Project settings → Team members to configure Alice and Bob, then export with OpenCode.'
-            : 'Example template loaded — all blocks are editable. Uses labeled sample data.',
-        );
+        notify('Example template loaded — all blocks are editable. Uses labeled sample data.');
         fit();
       }
     } catch (e) {
@@ -1082,7 +1075,6 @@ export default function App() {
           onStart={startProject}
           onRequirements={startRequirements}
           onExample={firstVisit ? startGuidedExample : loadTemplate}
-          onOwnerExample={() => void loadExample(false, 'owner-api')}
           onProjects={openLibrary}
           onOpen={openProject}
           onHelp={() => setModal('help')}
