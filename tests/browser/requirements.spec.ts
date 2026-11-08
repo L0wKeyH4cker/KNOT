@@ -192,6 +192,7 @@ test('upload actual PDF from onboarding, review tasks and preserve requirements 
 
   const event = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export runner', exact: true }).click();
+  await page.getByRole('button', { name: 'Download agent workspace', exact: true }).click();
   const bundle = await event;
   const zipPath = resolve(artifactDir, 'requirements-runner.zip');
   await bundle.saveAs(zipPath);

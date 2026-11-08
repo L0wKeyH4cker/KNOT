@@ -31,9 +31,22 @@ def relative_path(value: Any, allowed_roots: tuple[str, ...] = ()) -> str:
     return str(PurePosixPath(value))
 
 
+def resolve_path(path: Path | str) -> Path:
+    resolved = Path(path).resolve()
+    # Windows can retain the extended-length prefix when another process holds
+    # a newly created file. It denotes the same path, not a different drive.
+    if os.name == "nt":
+        value = str(resolved)
+        if value.startswith("\\\\?\\UNC\\"):
+            return Path("\\\\" + value[8:])
+        if value.startswith("\\\\?\\") and len(value) > 6 and value[5] == ":":
+            return Path(value[4:])
+    return resolved
+
+
 def safe_path(root: Path | str, value: str, allowed_roots: tuple[str, ...]) -> Path:
     relative = relative_path(value, allowed_roots)
-    root = Path(root).resolve()
+    root = resolve_path(root)
     candidate = root.joinpath(*relative.split("/"))
     cursor = root
     for part in relative.split("/"):
@@ -46,7 +59,7 @@ def safe_path(root: Path | str, value: str, allowed_roots: tuple[str, ...]) -> P
             reparse_point = False
         if reparse_point or cursor.is_symlink() or (hasattr(cursor, "is_junction") and cursor.is_junction()):
             raise PermissionError("Symlinks and junctions are not allowed in workflow file paths")
-    resolved = candidate.resolve()
+    resolved = resolve_path(candidate)
     if not resolved.is_relative_to(root):
         raise PermissionError("File path escapes the run directory")
     # The inputs/results top-level directory itself may not point outside root.

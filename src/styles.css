@@ -1692,6 +1692,24 @@ kbd {
 .exported-content .primary {
   margin-top: 13px;
 }
+.workspace-export-form {
+  text-align: left;
+}
+.workspace-export-form h3 {
+  font-size: 26px;
+}
+.workspace-export-form > p {
+  margin: 12px 0 24px;
+  color: #66755e;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.workspace-export-form .field {
+  margin-bottom: 20px;
+}
+.workspace-export-form .note {
+  font-size: 15px;
+}
 .onboarding {
   width: 940px;
   max-width: 96vw;

@@ -85,7 +85,7 @@ test('Check and Back preserve the visible example graph and its measurements acr
 
   for (let iteration = 0; iteration < 3; iteration++) {
     await page.getByRole('button', { name: 'Check', exact: true }).click();
-    await expect(page.getByText('Ready for a mock run.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Ready to export your workspace.', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(page).toHaveURL(/#\/workspace$/);
     await visibleGraph(page);

@@ -107,13 +107,14 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
   await page.getByRole('button', { name: 'Add delivery file' }).click();
   await closeInspector(page);
   await page.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(page.getByText('Ready for a mock run.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ready to export your workspace.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export runner' }).click();
+  await page.getByRole('button', { name: 'Download agent workspace', exact: true }).click();
   const bundle = await downloadEvent;
   await bundle.saveAs(resolve(artifactDir, 'manual-runner.zip'));
-  await expect(page.getByText('Take your team’s workflow with you.')).toBeVisible();
+  await expect(page.getByText('Your agents have their assignments.')).toBeVisible();
   const python =
     process.env.PYTHON ||
     spawnSync(process.execPath, ['scripts/dev.mjs', '--check-python'], {
@@ -334,11 +335,22 @@ test('template exports from browser and keeps review before delivery; no browser
   page.on('pageerror', (e) => errors.push(e.message));
   await openTemplate(page);
   await page.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(page.getByText('Ready for a mock run.', { exact: true })).toBeVisible();
-  const d = page.waitForEvent('download');
+  await expect(page.getByText('Ready to export your workspace.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Export runnable ZIP' }).click();
+  await expect(page.getByRole('heading', { name: 'One choice. Every agent.' })).toBeVisible();
+  await page.getByLabel('Run with', { exact: true }).selectOption('claude');
+  await page.getByLabel('Shared model (optional)', { exact: true }).fill('test-shared-model');
+  const d = page.waitForEvent('download');
+  const request = page.waitForRequest((value) => value.url().endsWith('/api/export'));
+  await page.getByRole('button', { name: 'Download agent workspace', exact: true }).click();
   await (await d).saveAs(resolve(artifactDir, 'template-runner.zip'));
-  await expect(page.getByText('Take your team’s workflow with you.')).toBeVisible();
+  await expect(page.getByText('Your agents have their assignments.')).toBeVisible();
+  const body = (await request).postDataJSON();
+  expect(body.execution).toEqual({ backend: 'claude', model: 'test-shared-model' });
+  expect(body.workflow.agents.every((agent: any) => agent.model === '')).toBe(true);
+  await expect(
+    page.getByText('Every role will use Claude with test-shared-model.', { exact: false }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });
 

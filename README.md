@@ -2,9 +2,31 @@
 
 <img src="public/brand/KNOT-logo.png" alt="KNOT" width="220" />
 
-在自由画布上设计小组 AI 工作流，下载包含固定 Python 执行器的 ZIP，在自己的电脑上运行。任务、Agent、人类负责人分别配置；画布的节点和连线就是运行包使用的工作流。
+在自由画布上设计小组 AI 工作流，下载可调用本地 Codex 或 Claude 的项目工作包。选一次运行方式，所有 Agent 按画板分工，在自己的电脑上写代码、执行任务并交接成果。同一种模型也可以承担多个独立角色。
 
 升级到 KNOT 后，浏览器内旧版保存的项目和项目库会自动迁移，已有的新存档不会被覆盖。
+
+## 导出本地 Agent 工作环境
+
+1. 在画板上确认任务和连接，点击 **Export runner**。
+2. 在 **Run with** 选择 **Codex** 或 **Claude**。共享模型可以留空，使用本地 CLI 的默认模型；无需为每个角色填写模型或密钥。
+3. 点击 **Download agent workspace**，解压到新目录。用户电脑需要 Python 3.10+，以及已安装、完成认证的对应 CLI：[Codex 安装说明](https://developers.openai.com/codex/cli/)、[Claude Code 安装说明](https://code.claude.com/docs/en/setup)。
+4. 如有初始项目代码，放入 `workspace/`。Windows 双击 `start.bat`，macOS/Linux 执行 `sh start.sh`。没有预先选择运行方式的包会在首次启动时询问并记住选择。
+5. 查看任务进度，在人工审核处检查草稿并作出决定。Output 节点将项目文件交付到 `results/project/`，画板配置的报告仍放在 `results/`。
+
+`knot.json` 保存统一执行配置，`workflow.json` 保留原画板；`tasks/` 和 `prompts/` 是可读的任务说明，`AGENTS.md` / `CLAUDE.md` 方便编程助手接手。任务各自拥有工作副本，独立任务按画板并发上限执行。执行连线只控制先后，数据连线才传递上游结果和代码改动。文件冲突会明确停止相关任务，不会自动覆盖。
+
+源码交接限制为单文件 16 MiB、总计 128 MiB、最多 5,000 个文件；不适合把大型数据集、权重或依赖目录作为源码交接。当前恢复功能覆盖人工审核暂停；失败或中断的编程会话尚不支持自动恢复，应保留日志和草稿，在新解压目录重新开始。
+
+启动器默认运行真实本地 Agent；缺少 CLI、认证或输入资料时停止并说明原因，不会退回 mock。账号额度与模型权限由用户的 CLI 配置提供，网页版聊天本身不代表具备本地执行能力。工作副本用于隔离并行改动，不是操作系统沙箱；命令权限由所选 CLI 执行。ZIP 不携带开发机器上的凭证。
+
+```sh
+python run.py --interactive
+python run.py --configure
+python run.py --backend codex --validate
+```
+
+`--configure` 更换统一执行方式，`--validate` 只检查结构和 CLI 可用性，不调用模型；认证和实际模型可用性仍需真实调用确认。旧的 `--mode mock` 与 `--mode real` 保留为显式高级模式。
 
 ## 启动项目
 
@@ -78,17 +100,17 @@ python server.py --port 8000
 
 如需重新执行整条演示验收，运行 `python scripts/verify_demo.py`。它会打包、解压到临时目录、确认审核前没有交付文件，再**明确模拟一次审核批准**，保存成果及包含 ZIP SHA-256 的验证摘要。这是开发验收脚本，不包含在用户下载的运行包中。
 
-解压运行包后，Windows 运行 `start.bat`，macOS/Linux 运行 `sh start.sh`。运行到审核时退出码是 **2**，表示暂停。检查 `logs/run-state.json` 的草稿，明确批准后继续：
+需要演练模板时，显式运行 `python run.py --mode mock`。运行到审核时退出码是 **2**，表示暂停。检查 `logs/run-state.json` 的草稿，明确批准后继续：
 
 ```sh
 python run.py --mode mock --resume --review review --decision approve --reviewer member-3
 ```
 
-拒绝时使用 `--decision reject`。新的一次运行应将 ZIP 解压到新的目录，已有运行状态不会被悄悄覆盖。真实执行时把命令中的模式改为 `real`。
+拒绝时使用 `--decision reject`。新的一次运行应将 ZIP 解压到新的目录，已有运行状态不会被悄悄覆盖。恢复时必须使用原来的运行模式；本地 Agent 使用 `local`，直接 API 调用使用 `real`。
 
-## 模型与凭证
+## 规划与直接 API 模式的模型、凭证
 
-规划模型负责生成结构化草案；任务 Agent 各自使用单独配置的模型连接。支持 OpenAI 兼容接口与 Anthropic Messages；OpenAI 官方 GPT-6 模型执行带工具的任务时自动使用 Responses，模型名称由用户填写。
+规划模型负责生成结构化草案；下文的逐 Agent 连接配置适用于高级 `--mode real` 直接 API 模式。本地 Codex/Claude 模式使用导出时选择的统一连接。直接 API 模式支持 OpenAI 兼容接口与 Anthropic Messages；OpenAI 官方 GPT-6 模型执行带工具的任务时自动使用 Responses，模型名称由用户填写。
 
 工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY`，不要把真实 key 放进节点、prompt 或 JSON。模型设置中的 **API key → Save on this device** 会将凭证保存到本机 `.env.local` 并立即生效；密码框随后清空，浏览器本地存储和导出 ZIP 不包含 key。也可以自行设置后端环境变量。
 
@@ -98,12 +120,13 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 
 开发后端启动时优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。在设置页显式保存的新 key 会更新当前后端进程和 `.env.local`，无需重启。规划模型的非敏感连接设置保存在当前浏览器中。下载的运行包使用自己的 `.env`，凭证需在运行包所在电脑另外配置。
 
-- **mock**：固定示例结果，验证调度、条件、权限和人工审核，不调用收费 API。
+- **local**（默认）：调用用户电脑上的 Codex/Claude，所有任务继承统一选择，各自维护任务上下文和工作副本。
+- **mock**（显式选择）：固定示例结果，验证调度、条件、权限和人工审核，不调用收费 API。
 - **real**：调用真实 API。缺少模型、凭证或 API 调用失败时明确报错，不会切换到 mock。
 
 已使用用户配置的 `gpt-6-luna` 完成真实需求分析和工作流生成：两页合成测试 PDF 提取出 3 项任务，生成 7 个节点、14 条连线。尚未执行这条工作流的真实 Agent 任务。完整验证状态见 [验证记录](docs/VERIFICATION.md)。本次调用的详细记录仅保留在本地 `artifacts/requirements-live-check.json`；可在界面上传自己的测试文档，再依次分析和生成，验证当前 API 配置。
 
-## 不同任务使用不同 API 和模型
+## 高级：不同任务使用不同 API 和模型
 
 同一个 KNOT 执行器可以连接多个模型服务。打开 **Agents**，分别为每个 Agent 设置 **Provider、Model name、Credential reference、API base URL**；然后在画布上的 **Agent Task → Agent** 选择负责该任务的 Agent。例如：
 
@@ -133,7 +156,7 @@ OpenAI 兼容服务默认使用 **Chat Completions**（基础地址后追加 `/c
 
 任务之间用执行连线控制先后顺序，用数据连线传递结果。独立任务可以并行，汇总任务等依赖完成后执行。AI designer 的规划模型单独配置，不会代替执行 Agent 的模型设置。生成画布后，仍需配置每个任务 Agent。
 
-下载 **Export runner** 后，在运行包的 `.env` 中为上述引用填写真实密钥，然后运行 `python run.py --mode real`。默认 mock 模式只验证流程；编辑器的后端配置也不会把密钥复制进下载包。自定义凭证引用显示“未检查”时，表示健康检查没有报告该名称，不能据此判定密钥不存在；真正调用时后端会检查它。
+如需使用上述直接 API 配置，在运行包的 `.env` 中为这些引用填写真实密钥，然后运行 `python run.py --mode real`。该路径与默认的本地 Codex/Claude 模式分开；编辑器的后端配置不会把密钥复制进下载包。自定义凭证引用显示“未检查”时，表示健康检查没有报告该名称，不能据此判定密钥不存在；真正调用时后端会检查它。
 
 ## Git 协作
 
@@ -174,9 +197,9 @@ npm run test:browser
 
 Windows 会自动使用默认安装目录中的 Google Chrome。其它环境或没有该 Chrome 时，先运行 `npx playwright install chromium`，也可以将 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 环境变量设为已有浏览器的可执行文件路径。
 
-已完成生产构建、**125 项 Python 验收（123 通过、2 个系统权限相关用例跳过）**、**35 项前端数据测试**和 **57 项浏览器交互测试**。前端数据测试包含旧版项目迁移、连接预设、引导状态、独立项目存储和写入失败后的数据保留。浏览器测试包括真实 PDF 上传与文字提取、任务清单编辑、生成后保存、JSON/ZIP 导出、多 Agent 独立模型配置、凭证设置、首次访问引导、项目删除确认、独立标签页、损坏项目库恢复、刷新保存和 Check 返回画板，也保留了实际拖拽、连线和下载包独立运行的验证。离开生成页后，旧请求的延迟结果不会覆盖后来打开的项目。浏览器中的模型响应使用明确的测试数据，真实 API 验证单独记录。完整结果和跳过项见 [验证记录](docs/VERIFICATION.md)。运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成需求上传、任务确认、桌面画布和小屏画布截图；这些文件不随仓库发布。
+已完成生产构建、**171 项 Python 验收（169 通过、2 个系统权限相关用例跳过）**、**35 项前端数据测试**和 **57 项浏览器交互测试**。前端数据测试包含旧版项目迁移、连接预设、引导状态、独立项目存储和写入失败后的数据保留。浏览器测试包括真实 PDF 上传与文字提取、任务清单编辑、生成后保存、JSON/ZIP 导出、多 Agent 独立模型配置、凭证设置、首次访问引导、项目删除确认、独立标签页、损坏项目库恢复、刷新保存和 Check 返回画板，也保留了实际拖拽、连线和下载包独立运行的验证。离开生成页后，旧请求的延迟结果不会覆盖后来打开的项目。浏览器中的模型响应使用明确的测试数据，真实 API 验证单独记录。完整结果和跳过项见 [验证记录](docs/VERIFICATION.md)。运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成需求上传、任务确认、桌面画布和小屏画布截图；这些文件不随仓库发布。
 
-MVP 限定为单机、无环工作流。支持读取文本/CSV、基础 CSV 汇总、写入 Markdown/JSON/CSV，不提供任意 shell、代码执行、联网搜索或浏览器工具。负责人成员信息不会授予凭证或文件访问权限。
+MVP 限定为单机、无环工作流。本地模式调用 Codex/Claude 提供编程与命令工具；直接 API 模式仍只支持读取文本/CSV、基础 CSV 汇总、写入 Markdown/JSON/CSV，不提供 shell 或代码执行。负责人成员信息不会授予凭证或文件访问权限。
 
 前端保存采用浏览器本地存储；不是多人实时协作系统。执行器只在 API 返回实际用量时记录 token，不估造账单。人工审核是本地操作确认，未实现企业身份认证。
 

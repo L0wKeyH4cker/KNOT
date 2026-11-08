@@ -138,11 +138,11 @@ class Handler(BaseHTTPRequestHandler):
                 reject_secrets(workflow)
                 if path == "/api/validate":
                     mode = body.get("mode", "mock")
-                    if mode not in ("mock", "real"):
-                        raise ValueError("运行模式只能是 mock 或 real。")
+                    if mode not in ("mock", "real", "local"):
+                        raise ValueError("运行模式只能是 local、mock 或 real。")
                     self.send_json(200, {"issues": validate_workflow(workflow, mode=mode)})
                 else:
-                    self.send_bytes(200, build_bundle(workflow), "application/zip", {"Content-Disposition": 'attachment; filename="knot-workflow.zip"'})
+                    self.send_bytes(200, build_bundle(workflow, body.get("execution")), "application/zip", {"Content-Disposition": 'attachment; filename="knot-workflow.zip"'})
             elif path == "/api/plan":
                 workflow = plan_workflow(body.get("project"), body.get("resources", []), body.get("planner"))
                 self.send_json(200, {"workflow": workflow})

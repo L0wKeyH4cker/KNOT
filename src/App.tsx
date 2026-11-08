@@ -198,6 +198,11 @@ export default function App() {
       },
   );
   const [plannerReady, setPlannerReady] = useState(() => !!readPlanner());
+  const [execution, setExecution] = useState({
+    backend: 'codex' as 'codex' | 'claude',
+    model: '',
+  });
+  const [exportDownloaded, setExportDownloaded] = useState(false);
   const plannerInitialized = useRef(plannerReady);
   const [draft, setDraft] = useState({ name: '', members: 3, goal: '', deliverable: '' });
   const [intakeProject, setIntakeProject] = useState<Workflow | null>(null);
@@ -714,15 +719,15 @@ export default function App() {
     try {
       const { issues } = await api<{ issues: Issue[] }>('validate', {
         workflow: candidate,
-        mode: 'mock',
+        mode: 'local',
       });
       if (request !== validationRequest.current) return;
-      setIssues(issues);
+      setIssues(issues.filter((issue) => issue.code !== 'model'));
       setOnline(true);
     } catch (e) {
       if (request !== validationRequest.current) return;
       setIssues([
-        ...localIssues(candidate),
+        ...localIssues(candidate).filter((issue) => issue.code !== 'model'),
         {
           severity: 'error',
           code: 'backend',
@@ -753,12 +758,18 @@ export default function App() {
     if (step.page === 'canvas') fitTour();
     if (step.id === 'check') void runCheck(current.current);
   };
+  function openExport() {
+    setExportDownloaded(false);
+    setModal('exported');
+  }
   async function exportZip() {
     setBusy('export');
     try {
       assertSafeWorkflow(wf);
-      const check = await api<{ issues: Issue[] }>('validate', { workflow: wf, mode: 'mock' });
-      setIssues(check.issues);
+      const selection = { ...execution, model: execution.model.trim() };
+      assertSafeWorkflow(selection);
+      const check = await api<{ issues: Issue[] }>('validate', { workflow: wf, mode: 'local' });
+      setIssues(check.issues.filter((issue) => issue.code !== 'model'));
       if (check.issues.some((i) => i.severity === 'error')) {
         setModal('check');
         return;
@@ -766,7 +777,7 @@ export default function App() {
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow: wf }),
+        body: JSON.stringify({ workflow: wf, execution: selection }),
       });
       if (!res.ok) {
         const x = await res.json();
@@ -776,7 +787,8 @@ export default function App() {
         await res.blob(),
         `${wf.project.name.replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'knot'}-runner.zip`,
       );
-      setModal('exported');
+      setExecution(selection);
+      setExportDownloaded(true);
     } catch (e) {
       notify((e as Error).message);
     } finally {
@@ -1082,7 +1094,7 @@ export default function App() {
                   className="primary"
                   data-tour="export-runner"
                   disabled={!!busy}
-                  onClick={exportZip}
+                  onClick={openExport}
                 >
                   {busy === 'export' ? (
                     <LoaderCircle className="spin" size={16} />
@@ -1551,7 +1563,9 @@ export default function App() {
                       check: 'Workflow check',
                       saved: 'Your project library',
                       help: 'A guide to your canvas',
-                      exported: 'Your workflow, ready to go.',
+                      exported: exportDownloaded
+                        ? 'Your workspace is ready.'
+                        : 'Run on your computer',
                     }[modal]
                   }
                 </h2>
@@ -1619,7 +1633,7 @@ export default function App() {
                           <h3>
                             {issues.some((i) => i.severity === 'error')
                               ? 'A few things need your attention.'
-                              : 'Ready for a mock run.'}
+                              : 'Ready to export your workspace.'}
                           </h3>
                           <p>
                             {issues.filter((i) => i.severity === 'error').length} errors ·{' '}
@@ -1629,8 +1643,8 @@ export default function App() {
                         </div>
                       </div>
                       <p className="muted small">
-                        This checks the current canvas for export. Real runs also require valid
-                        model names, credentials, and all input files.
+                        Your canvas is checked here. The downloaded launcher checks Codex or Claude
+                        on your computer before starting any tasks.
                       </p>
                       <div className="issue-list">
                         {issues.map((i, j) => (
@@ -1671,7 +1685,7 @@ export default function App() {
                       <button
                         className="primary full"
                         disabled={issues.some((i) => i.severity === 'error') || !!busy}
-                        onClick={exportZip}
+                        onClick={openExport}
                       >
                         <Download size={16} />
                         Export runnable ZIP
@@ -1708,45 +1722,103 @@ export default function App() {
                   <div className="export-icon">
                     <Download size={30} />
                   </div>
-                  <h3>Take your team’s workflow with you.</h3>
-                  <p>
-                    Your ZIP contains the fixed Python runner, current workflow, prompts, example
-                    inputs, and setup instructions.
-                  </p>
-                  <ol className="export-steps">
-                    <li>
-                      <span>1</span>
-                      <div>
-                        <strong>Extract to a new folder</strong>
-                        <p>Python 3.10 or newer is required.</p>
+                  {exportDownloaded ? (
+                    <>
+                      <h3>Your agents have their assignments.</h3>
+                      <p>
+                        Every role will use {execution.backend === 'codex' ? 'Codex' : 'Claude'}
+                        {execution.model ? ` with ${execution.model}` : ' with its default model'}.
+                        Tasks follow the connections and review gates on your canvas.
+                      </p>
+                      <ol className="export-steps">
+                        <li>
+                          <span>1</span>
+                          <div>
+                            <strong>Extract to a new folder</strong>
+                            <p>Add any existing project code to workspace/.</p>
+                          </div>
+                        </li>
+                        <li>
+                          <span>2</span>
+                          <div>
+                            <strong>Start your local agents</strong>
+                            <p>Open start.bat on Windows, or run sh start.sh on macOS/Linux.</p>
+                          </div>
+                        </li>
+                        <li>
+                          <span>3</span>
+                          <div>
+                            <strong>Follow progress and review results</strong>
+                            <p>Code is delivered to results/project/ after required reviews.</p>
+                          </div>
+                        </li>
+                      </ol>
+                      <div className="note">
+                        START-HERE.md includes setup steps. Missing tools or sign-in stop the run
+                        with an explanation; they never produce mock results.
                       </div>
-                    </li>
-                    <li>
-                      <span>2</span>
-                      <div>
-                        <strong>Try the mock run</strong>
-                        <p>Open start.bat on Windows, or run bash start.sh on macOS/Linux.</p>
+                      <button className="primary full" onClick={() => setModal(null)}>
+                        Back to canvas
+                        <ArrowRight size={16} />
+                      </button>
+                    </>
+                  ) : (
+                    <form
+                      className="workspace-export-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void exportZip();
+                      }}
+                    >
+                      <h3>One choice. Every agent.</h3>
+                      <p>
+                        Your agents share a coding assistant, each with its own assignment and
+                        working copy. Independent tasks can run together.
+                      </p>
+                      <div className="field">
+                        <label htmlFor="export-backend">Run with</label>
+                        <select
+                          id="export-backend"
+                          value={execution.backend}
+                          onChange={(event) =>
+                            setExecution({
+                              backend: event.target.value as 'codex' | 'claude',
+                              model: '',
+                            })
+                          }
+                        >
+                          <option value="codex">Codex</option>
+                          <option value="claude">Claude</option>
+                        </select>
                       </div>
-                    </li>
-                    <li>
-                      <span>3</span>
-                      <div>
-                        <strong>Review, then approve</strong>
-                        <p>
-                          The runner prints the exact command to continue. Final delivery waits for
-                          your approval.
-                        </p>
+                      <div className="field">
+                        <label htmlFor="export-model">Shared model (optional)</label>
+                        <input
+                          id="export-model"
+                          value={execution.model}
+                          placeholder="Use your coding assistant’s default"
+                          autoComplete="off"
+                          maxLength={128}
+                          onChange={(event) =>
+                            setExecution((value) => ({ ...value, model: event.target.value }))
+                          }
+                        />
                       </div>
-                    </li>
-                  </ol>
-                  <div className="note">
-                    For real execution, configure model names and credentials locally, then run with
-                    --mode real. See the bundled README.
-                  </div>
-                  <button className="primary full" onClick={() => setModal(null)}>
-                    Back to canvas
-                    <ArrowRight size={16} />
-                  </button>
+                      <div className="note">
+                        Requires Python 3.10+ and the selected coding CLI installed and signed in on
+                        your computer. Your account supplies model access. No API keys are included
+                        in the ZIP.
+                      </div>
+                      <button className="primary full" type="submit" disabled={!!busy}>
+                        {busy === 'export' ? (
+                          <LoaderCircle className="spin" size={17} />
+                        ) : (
+                          <Download size={17} />
+                        )}
+                        Download agent workspace
+                      </button>
+                    </form>
+                  )}
                 </div>
               )}
             </div>

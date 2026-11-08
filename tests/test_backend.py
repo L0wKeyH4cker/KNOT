@@ -69,6 +69,44 @@ class BundleTests(unittest.TestCase):
             with self.assertRaises(BundleError):
                 reject_secrets({"goal": "unit-test-secret-credential"})
 
+    def test_local_workspace_uses_one_backend_without_changing_agent_models(self):
+        workflow = load_template()
+        archive = zipfile.ZipFile(io.BytesIO(build_bundle(workflow, {"backend": "claude", "model": "test-shared-model"})))
+        self.assertEqual(json.loads(archive.read("workflow.json")), workflow)
+        execution = json.loads(archive.read("knot.json"))
+        self.assertEqual(execution["backend"], "claude")
+        self.assertEqual(execution["model"], "test-shared-model")
+        self.assertEqual(execution["task_timeout_seconds"], 1800)
+        for name in ("START-HERE.md", "AGENTS.md", "CLAUDE.md", "workspace/", ".gitignore"):
+            self.assertIn(name, archive.namelist())
+        tasks = [name for name in archive.namelist() if name.startswith("tasks/")]
+        self.assertEqual(len(tasks), sum(node["type"] == "agent_task" for node in workflow["nodes"]))
+        synthesis = next(archive.read(name).decode() for name in tasks if name.endswith("-synthesis.md"))
+        self.assertIn("Explicit data and code inputs: research, analysis", synthesis)
+        self.assertIn(next(node for node in workflow["nodes"] if node["id"] == "synthesis")["config"]["acceptance"], synthesis)
+        self.assertIn(b"--interactive", archive.read("start.bat"))
+        self.assertIn(b"--interactive", archive.read("start.sh"))
+        self.assertNotIn(b"--mode mock", archive.read("start.bat"))
+        self.assertNotIn(b"--mode mock", archive.read("start.sh"))
+
+    def test_unselected_workspace_defers_choice_to_local_launcher(self):
+        archive = zipfile.ZipFile(io.BytesIO(build_bundle(load_template())))
+        self.assertIsNone(json.loads(archive.read("knot.json"))["backend"])
+        self.assertEqual(json.loads(archive.read("knot.json"))["model"], "")
+
+    def test_execution_selection_rejects_secrets_and_arbitrary_commands(self):
+        for execution in (
+            {"backend": "shell"},
+            {"backend": "codex", "command": "untrusted command"},
+            {"backend": "claude", "model": "sk-" + "x" * 32},
+            {"backend": "codex", "task_timeout_seconds": -1},
+        ):
+            with self.subTest(execution=execution), self.assertRaises(BundleError):
+                build_bundle(load_template(), execution)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-only-sensitive-value"}):
+            with self.assertRaises(BundleError):
+                build_bundle(load_template(), {"backend": "codex", "model": "test-only-sensitive-value"})
+
     def test_resource_paths_cannot_escape_archive(self):
         for path in ("../outside", "inputs/../outside", "C:/inputs/a", "inputs\\a.txt", "/inputs/a.txt", "inputs/CON.txt"):
             with self.subTest(path=path), self.assertRaises(BundleError):
@@ -232,9 +270,11 @@ class HTTPTests(unittest.TestCase):
             workflow = json.load(response)
         with self.post("/api/validate", {"workflow": workflow}) as response:
             self.assertFalse([i for i in json.load(response)["issues"] if i["severity"] == "error"])
-        with self.post("/api/export", {"workflow": workflow}) as response:
+        with self.post("/api/export", {"workflow": workflow, "execution": {"backend": "codex", "model": "shared-test-model"}}) as response:
             self.assertEqual(response.headers.get_content_type(), "application/zip")
-            self.assertIn("workflow.json", zipfile.ZipFile(io.BytesIO(response.read())).namelist())
+            archive = zipfile.ZipFile(io.BytesIO(response.read()))
+            self.assertIn("workflow.json", archive.namelist())
+            self.assertEqual(json.loads(archive.read("knot.json"))["model"], "shared-test-model")
 
     def test_cross_origin_write_and_filesystem_escape_rejected(self):
         with self.assertRaises(urllib.error.HTTPError) as context:

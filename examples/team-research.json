@@ -398,6 +398,6 @@
     "Interview synthesis and survey analysis have no mutual dependency, so they run in parallel.",
     "The report task waits for both branches and reads only results shared through explicit data links.",
     "Final files wait for Member C's explicit approval. Assigning a human owner does not grant credentials or file access.",
-    "Execution model names are not configured. Mock mode works immediately; real mode requires separate model IDs and credential environment variables."
+    "Choose Codex or Claude once when exporting the local workspace; every role can share that assistant and its default model. Per-agent API models are only needed for the advanced direct API mode."
   ]
 }

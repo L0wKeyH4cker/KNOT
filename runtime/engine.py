@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .providers import ProviderError, complete
-from .security import MAX_FILE_BYTES, redact, safe_path, register_secret
+from .security import MAX_FILE_BYTES, redact, safe_path, register_secret, resolve_path
 from .tools import ToolRunner, read_limited
 from .validation import validate_workflow
 
@@ -72,7 +72,7 @@ class WorkflowError(ValueError):
 class Engine:
     """The local machine is the trust boundary; members are attribution, not login."""
 
-    def __init__(self, workflow: dict, root: Path | str, mode: str = "mock", state_path: Path | str | None = None):
+    def __init__(self, workflow: dict, root: Path | str, mode: str = "mock", state_path: Path | str | None = None, execution: dict | None = None):
         self.workflow = copy.deepcopy(workflow)
         import os
         for agent in workflow.get("agents", []) if isinstance(workflow, dict) else []:
@@ -81,12 +81,19 @@ class Engine:
         issues = validate_workflow(workflow, mode)
         if any(item["severity"] == "error" for item in issues):
             raise WorkflowError(issues)
-        self.root = Path(root).resolve()
+        self.root = resolve_path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.mode = mode
         self.nodes = {node["id"]: node for node in workflow["nodes"]}
         self.agents = {agent["id"]: agent for agent in workflow["agents"]}
         self.resources = {resource["id"]: resource for resource in workflow["resources"]}
+        self.execution = None
+        self.workspace = None
+        if mode == "local":
+            from .local_config import validate_execution
+            from .workspace import LocalWorkspace
+            self.execution = validate_execution(execution)
+            self.workspace = LocalWorkspace(self.root, self.workflow)
         self.incoming = {nid: [edge for edge in workflow["edges"] if edge["target"] == nid] for nid in self.nodes}
         self.limits = workflow["limits"]
         self.state_path = safe_path(self.root, str(state_path or "logs/run-state.json").replace("\\", "/"), ("logs",))
@@ -99,6 +106,8 @@ class Engine:
         self.state = {"schema_version": "1.0", "run_id": uuid.uuid4().hex, "workflow_hash": fingerprint(workflow), "mode": mode,
                       "status": "pending", "started_at": now(), "updated_at": now(),
                       "nodes": {nid: {"status": "pending", "attempts": 0} for nid in self.nodes}, "results": {}, "events": [], "warnings": [i for i in issues if i["severity"] == "warning"]}
+        if self.execution:
+            self.state["execution"] = copy.deepcopy(self.execution)
 
     def _save(self) -> None:
         with self.lock:
@@ -127,6 +136,9 @@ class Engine:
             safe_path(self.root, "logs/events.jsonl", ("logs",))
             with self.log_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+            if self.mode == "local" and event in {"node_started", "node_succeeded", "node_failed", "waiting_review", "run_completed", "run_failed"}:
+                label = self.nodes[node_id]["label"] if node_id in self.nodes else "Workflow"
+                print(redact(f"[KNOT] {label}: {event.removeprefix('node_').removeprefix('run_')}"), flush=True)
 
     def _preflight_inputs(self) -> None:
         used = {rid for node in self.nodes.values() if node["type"] == "shared_resource" for rid in node["config"]["resource_ids"]}
@@ -145,6 +157,8 @@ class Engine:
             raise ValueError("Workflow changed since this run. Export/run a new package instead of reusing its review state.")
         if state.get("mode") != self.mode:
             raise ValueError("Cannot resume a run in a different mode")
+        if self.mode == "local" and state.get("execution") != self.execution:
+            raise ValueError("Execution settings changed since this run; restore knot.json before resuming")
         if state.get("status") != "waiting_review":
             raise ValueError("Saved run is not waiting for human review")
         if set(state.get("nodes", {})) != set(self.nodes):
@@ -158,6 +172,8 @@ class Engine:
         review = self.state["nodes"][review_id]
         review.update({"status": "succeeded" if decision == "approve" else "failed", "finished_at": now(), "reviewer_id": reviewer_id, "decision": decision})
         self.state["results"][review_id] = {"content": f"Human review {decision}", "data": {"approved": decision == "approve", "reviewer_id": reviewer_id}}
+        if self.workspace and decision == "approve":
+            self.state["results"][review_id]["artifacts"] = self.workspace.merge(self._inputs(review_id))
         if decision == "reject":
             review["error"] = "Human reviewer rejected this result"
         self._event("review_" + decision, review_id, reviewer_id=reviewer_id)
@@ -192,6 +208,25 @@ class Engine:
 
     def _task(self, node: dict, inputs: dict, deadline: float) -> dict:
         cfg = node["config"]
+        if self.mode == "local":
+            from .coding import run_coding_task
+            from .workspace import task_prompt
+            work, before, inherited = self.workspace.prepare(node, inputs)
+            self._event("coding_task_started", node["id"], backend=self.execution["backend"], workspace=work.relative_to(self.root).as_posix())
+            reply = run_coding_task(
+                self.execution["backend"], self.execution["model"], work,
+                task_prompt(self.workflow, node, self.agents[cfg["agent_id"]]),
+                max(0.01, deadline - time.monotonic()),
+                event_callback=lambda event: self._event("coding_event", node["id"], detail=event),
+            )
+            if cfg["output_format"] == "json" and reply.get("data") is None:
+                raise ValueError("Task requested JSON but the coding agent returned no structured data")
+            if cfg["output_format"] == "csv":
+                serialize_output(reply, "csv")
+            artifacts, modified = self.workspace.collect(node, work, before, inherited)
+            reply.update({"mode": "local", "backend": self.execution["backend"], "input_nodes": list(inputs), "artifacts": artifacts,
+                          "modified_files": modified, "workspace": work.relative_to(self.root).as_posix()})
+            return redact(reply)
         if self.mode == "mock":
             delay = cfg.get("mock_delay_ms", 100) / 1000
             remaining = deadline - time.monotonic()
@@ -293,27 +328,38 @@ class Engine:
                 if len(content.encode("utf-8")) > MAX_FILE_BYTES:
                     raise ValueError("Output exceeds the 2 MB file limit")
                 prepared.append((path, content))
+            project_path = None
+            if self.workspace:
+                project_path = self.workspace.publish({m["source_node"]: inputs[m["source_node"]] for m in cfg["mappings"]}, node["id"])
             for path, content in prepared:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
-            return {"content": "Final files saved", "data": {"files": [path.relative_to(self.root).as_posix() for path, _ in prepared]}}
+            files = [path.relative_to(self.root).as_posix() for path, _ in prepared]
+            if project_path:
+                files.append(project_path)
+            return {"content": "Final files saved", "data": {"files": files}}
         raise ValueError(f"Unsupported node execution type: {kind}")
 
     def _with_retries(self, node: dict, inputs: dict) -> dict:
-        for attempt in range(self.limits["max_retries"] + 1):
+        # Coding commands have side effects. Never blindly replay a failed task.
+        retries = 0 if self.mode == "local" else self.limits["max_retries"]
+        timeout = self.execution["task_timeout_seconds"] if self.execution else self.limits["timeout_seconds"]
+        for attempt in range(retries + 1):
             with self.lock:
                 self.state["nodes"][node["id"]]["attempts"] = attempt + 1
-            deadline = time.monotonic() + self.limits["timeout_seconds"]
+            deadline = time.monotonic() + timeout
             try:
                 result = self._execute(node, inputs, deadline)
                 if time.monotonic() > deadline:
                     raise TimeoutError("Task exceeded its deadline")
+                if self.workspace and node["type"] not in ("agent_task", "output"):
+                    result["artifacts"] = self.workspace.merge(inputs)
                 return redact(result)
             except (PermissionError, ValueError, FileNotFoundError):
                 # Configuration/permission failures cannot be repaired by retrying.
                 raise
             except Exception as error:
-                if attempt >= self.limits["max_retries"]:
+                if attempt >= retries:
                     raise
                 self._event("retry", node["id"], attempt=attempt + 1, error=redact(str(error)))
         raise RuntimeError("Retry limit exhausted")

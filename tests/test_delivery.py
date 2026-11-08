@@ -162,7 +162,7 @@ class DeliveryAcceptanceTests(unittest.TestCase):
     def test_windows_launcher_prepares_environment_and_reaches_review(self):
         folder = self.unpack(self.workflow)
         launched = subprocess.run(
-            ["cmd.exe", "/d", "/c", "start.bat"], cwd=folder,
+            ["cmd.exe", "/d", "/c", "start.bat", "--mode", "mock"], cwd=folder,
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
         )
         self.assertEqual(launched.returncode, 2, launched.stdout + launched.stderr)

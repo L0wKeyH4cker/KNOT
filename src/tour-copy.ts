@@ -22,7 +22,7 @@ export const TOUR_COPY: Record<string, { title: string; description: string }> =
   agents: {
     title: 'Choose the right AI for each job',
     description:
-      'Agents have their own role, instructions, and model connection. You can reuse an agent across tasks and choose different providers for different roles.',
+      'Give agents their own roles and instructions. Local workspaces use one coding assistant for every role; direct API mode also supports separate model connections.',
   },
   project: {
     title: 'Bring your people and materials',
@@ -42,7 +42,7 @@ export const TOUR_COPY: Record<string, { title: string; description: string }> =
   export: {
     title: 'Take the workflow with you',
     description:
-      'Export runner downloads your workflow and its local Python runner. The example can run in mock mode; real tasks use the models you configure.',
+      'Choose Codex or Claude once, then download your agent workspace. The local launcher follows the canvas, runs independent tasks together, and pauses for your reviews.',
   },
   complete: {
     title: 'Now make something of your own',

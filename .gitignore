@@ -36,6 +36,9 @@ results/
 test-results/
 playwright-report/
 .test-tmp/
+.knot/
+/workspace/
+/knot.json
 .disk-cleanup/
 .pytest_cache/
 .coverage

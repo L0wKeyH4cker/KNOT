@@ -87,19 +87,19 @@ const steps = [
     id: 'check',
     label: 'Workflow check',
     image: 'check',
-    alt: 'Workflow check results showing that the example can run in mock mode and needs model configuration for real mode.',
+    alt: 'Workflow check results for a local agent workspace, including connections and human review gates.',
     tips: [
       'Use Check to review connections, task configuration, and permissions before exporting.',
-      'The example works in mock mode straight away. Real mode also needs model IDs and local credentials.',
+      'Check verifies the canvas. The downloaded launcher checks your chosen coding CLI on your computer.',
     ],
   },
   {
     id: 'export',
     label: 'Export & run',
     image: 'export',
-    alt: 'The export confirmation with instructions to extract the runner, try mock mode, and configure real models.',
+    alt: 'The export page where one Codex or Claude selection and optional model apply to every agent.',
     tips: [
-      'Export runner downloads a ZIP with your workflow, Python runner, prompts, inputs, and setup instructions.',
+      'Export runner lets you choose Codex or Claude once for every role, then download the complete agent workspace.',
       'Extract it to a new folder and follow the included launch instructions. Human Review pauses delivery until the assigned person approves.',
     ],
   },
@@ -268,11 +268,15 @@ export default function QuickGuide({
           <div>
             <h3>Choose how you run</h3>
             <p>
-              <strong>Mock</strong> uses fixed, labeled example results without API calls.
+              <strong>Local agents</strong> use Codex or Claude on your computer. Choose once at
+              export; all roles inherit that choice and work in separate sessions.
             </p>
             <p>
-              <strong>Real</strong> uses your configured models and local credentials. A failed API
-              call never switches to mock output.
+              <strong>Mock</strong> is an explicit rehearsal with labeled example results.
+            </p>
+            <p>
+              <strong>Direct API</strong> remains available as an advanced mode. Missing tools or
+              failed requests never switch to mock output.
             </p>
           </div>
         </div>

@@ -54,8 +54,8 @@ def _validate_workflow(workflow: Any, mode: str = "mock") -> list[dict]:
         issue("secret", "Workflow contains a secret or credential literal. Use an environment-variable credential reference only.")
     if workflow.get("schema_version") != "1.0":
         issue("schema_version", "Only schema_version 1.0 is supported")
-    if mode not in {"mock", "real"}:
-        issue("mode", "Mode must be mock or real")
+    if mode not in {"mock", "real", "local"}:
+        issue("mode", "Mode must be mock, real or local")
     project = workflow.get("project")
     if not isinstance(project, dict):
         issue("schema", "project must be an object")
@@ -95,7 +95,7 @@ def _validate_workflow(workflow: Any, mode: str = "mock") -> list[dict]:
                 issue("agent_config", f"Agent {aid}: {key} is required")
         if agent.get("provider") not in ("openai", "anthropic"):
             issue("provider", f"Agent {aid}: unsupported provider")
-        if not string(agent.get("model")):
+        if mode != "local" and not string(agent.get("model")):
             issue("model", f"Agent {aid}: configure a model before real execution", severity="error" if mode == "real" else "warning")
         ref = agent.get("credential_ref", "")
         if not isinstance(ref, str) or not ENV_RE.fullmatch(ref):
@@ -268,6 +268,8 @@ def _validate_workflow(workflow: Any, mode: str = "mock") -> list[dict]:
                     issue("output_format", "Unsupported output file format", nid)
                 try:
                     path = relative_path(mapping.get("filename"))
+                    if mode == "local" and (path.casefold() == "project" or path.casefold().startswith("project/") or path.casefold().startswith("task-")):
+                        issue("output_path", "Local coding reserves results/project/ and results/task-*/ for delivered source files. Choose a different report filename.", nid)
                     if path.casefold() in output_paths:
                         issue("output_collision", f"More than one output writes {path}", nid)
                     output_paths.add(path.casefold())
