@@ -11,7 +11,7 @@ import zipfile
 
 from backend.bundle import build_bundle
 from backend.planner import PlanningError, plan_workflow
-from backend.requirements import analyze_requirements
+from backend.requirements import analysis_errors, analyze_requirements
 from backend.template import load_template
 from runtime.providers import ProviderError
 
@@ -31,8 +31,8 @@ def document_fixture():
 def analysis_fixture():
     return {"project_name": "校园通勤研究", "goal": "研究校园通勤体验并提出建议。",
             "deliverables": ["Markdown 研究报告", "CSV 建议表"],
-            "tasks": [{"title": "整理现有材料", "description": "检查提供的通勤材料，标记缺失信息。", "acceptance": "列出材料来源及缺失信息。", "source_pages": [1]},
-                      {"title": "编写报告和建议表", "description": "基于材料整理报告和 CSV 表格。", "acceptance": "报告和表格内容一致且不伪造数据。", "source_pages": [1, 2]}],
+            "tasks": [{"title": "整理现有材料", "description": "检查提供的通勤材料，标记缺失信息。", "acceptance": "列出材料来源及缺失信息。", "owner": "", "source_pages": [1]},
+                      {"title": "编写报告和建议表", "description": "基于材料整理报告和 CSV 表格。", "acceptance": "报告和表格内容一致且不伪造数据。", "owner": "", "source_pages": [1, 2]}],
             "constraints": ["不要推断调查数据"], "missing_information": ["尚未提供真实调查数据。"]}
 
 
@@ -87,7 +87,7 @@ class RequirementsAnalysisTests(unittest.TestCase):
             "project_name": "市场数据分析", "goal": "本地运行市场分析并交付可检查的报告和图表。",
             "deliverables": ["report.pdf", "report.html", "8 张 PNG 图表"],
             "tasks": [{"title": "生成并验证报告和图表", "description": "用本地工具执行分析代码并生成 PDF、HTML 和 PNG 文件。",
-                       "acceptance": "实际运行成功，报告和 8 张图表存在且能打开。", "source_pages": [1]}],
+                       "acceptance": "实际运行成功，报告和 8 张图表存在且能打开。", "owner": "", "source_pages": [1]}],
             "constraints": ["使用本地 Codex 执行"],
             "missing_information": ["需检查本地制图与 PDF 生成依赖是否可用。"],
         }
@@ -111,6 +111,52 @@ class RequirementsAnalysisTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True), self.assertRaises(PlanningError) as raised:
             analyze_requirements(document_fixture(), PLANNER, model_call=lambda *_a, **_k: self.fail("no key must not invoke model"))
         self.assertEqual(raised.exception.status, 503)
+
+    def test_explicit_owners_are_preserved_without_inventing_unspecified_owners(self):
+        analysis = analysis_fixture()
+        analysis["tasks"][0]["owner"] = "Maya"
+        analysis["tasks"][1]["owner"] = ""
+
+        def call(_agent, system, _prompt, **_kwargs):
+            self.assertIn("never merge work assigned to different people", system)
+            self.assertIn("otherwise use an empty string", system)
+            return {"content": json.dumps(analysis)}
+
+        self.assertEqual(self.analyze(call), analysis)
+
+    def test_invalid_owner_types_and_excessive_names_are_rejected(self):
+        for owner in (None, ["Maya"], 42, "M" * 301):
+            analysis = analysis_fixture()
+            analysis["tasks"][0]["owner"] = owner
+            with self.subTest(owner=owner), self.assertRaises(PlanningError) as raised:
+                self.analyze(lambda *_a, **_k: {"content": json.dumps(analysis)})
+            self.assertEqual(raised.exception.status, 422)
+
+    def test_new_analysis_missing_owner_requires_repair(self):
+        calls = []
+        corrected = analysis_fixture()
+        corrected["tasks"][0]["owner"] = "Maya"
+
+        def call(_agent, _system, prompt, **_kwargs):
+            calls.append(prompt)
+            if len(calls) == 1:
+                omitted = deepcopy(corrected)
+                omitted["tasks"][0].pop("owner")
+                return {"content": json.dumps(omitted)}
+            self.assertIn("must include owner", prompt)
+            return {"content": json.dumps(corrected)}
+
+        document = document_fixture()
+        document["text"] += "\nMaya 负责整理现有材料。"
+        self.assertEqual(self.analyze(call, document), corrected)
+        self.assertEqual(len(calls), 2)
+
+    def test_saved_analysis_without_owners_remains_valid(self):
+        legacy = analysis_fixture()
+        for task in legacy["tasks"]:
+            task.pop("owner")
+        self.assertEqual(analysis_errors(legacy, 2), [])
+        self.assertTrue(analysis_errors(legacy, 2, require_owner=True))
 
     def test_repair_preserves_full_source_and_can_succeed(self):
         calls = []
@@ -277,6 +323,13 @@ class DocumentWorkflowIntegrationTests(unittest.TestCase):
         result["resources"][0]["content"] = "changed result"
         self.assertEqual(self.workflow["resources"][0]["content"], source["text"])
 
+    def test_saved_analysis_without_owners_can_still_generate(self):
+        legacy = analysis_fixture()
+        for task in legacy["tasks"]:
+            task.pop("owner")
+        self.workflow["resources"][1]["content"] = json.dumps(legacy)
+        self.assertEqual(self.plan(lambda *_a, **_k: {"content": json.dumps(self.workflow)}), self.workflow)
+
     def test_explicit_changed_project_or_resources_are_never_overwritten_to_hide_tampering(self):
         for field in ("project", "resources"):
             draft = deepcopy(self.workflow)
@@ -313,6 +366,150 @@ class DocumentWorkflowIntegrationTests(unittest.TestCase):
             for resource in self.workflow["resources"]:
                 self.assertEqual(archive.read(resource["path"]).decode("utf-8"), resource["content"])
             self.assertEqual(json.loads(archive.read("workflow.json"))["resources"], self.workflow["resources"])
+
+
+class TaskOwnershipPlanningTests(unittest.TestCase):
+    def setUp(self):
+        self.workflow = safe_draft()
+        self.workflow["project"]["members"] = [
+            {"id": f"member-{index}", "name": name, "skills": ""}
+            for index, name in enumerate(("Maya", "Leo", "Nina", "Sam"), start=1)
+        ]
+        self.tasks = [
+            {"title": title, "description": f"{owner} 负责{title}。", "acceptance": f"提交可核对的{title}成果。",
+             "owner": owner, "source_pages": [1]}
+            for title, owner in (("汇总", "Maya"), ("场地", "Leo"), ("清单", "Leo"),
+                                 ("预算", "Nina"), ("排班", "Nina"), ("宣传", "Sam"))
+        ]
+        analysis = {**analysis_fixture(), "tasks": self.tasks}
+        self.workflow["resources"] = [{
+            "id": "requirements-analysis-owners", "name": "Reviewed team assignments",
+            "path": "inputs/requirements-analysis-owners.json", "description": "Reviewed event tasks.",
+            "example": False, "content": json.dumps(analysis, ensure_ascii=False),
+        }]
+        nodes = {node["id"]: node for node in self.workflow["nodes"]}
+        nodes["resources"]["config"]["resource_ids"] = [self.workflow["resources"][0]["id"]]
+        for nid, owner, indexes in (("research", "member-2", [2, 3]),
+                                     ("analysis", "member-3", [4, 5]), ("synthesis", "member-1", [1])):
+            nodes[nid]["config"].update(owner_id=owner, requirement_task_indexes=indexes)
+        nodes["review"]["config"]["owner_id"] = "member-1"
+        publicity = deepcopy(nodes["research"])
+        publicity["id"] = "publicity"
+        publicity["config"].update(owner_id="member-4", requirement_task_indexes=[6])
+        self.workflow["nodes"].append(publicity)
+        # Sam's independent branch feeds Maya's summary just like the other branches.
+        for edge in list(self.workflow["edges"]):
+            if "research" in (edge["source"], edge["target"]):
+                added = deepcopy(edge)
+                added["id"] += "-publicity"
+                for field in ("source", "target"):
+                    if added[field] == "research":
+                        added[field] = "publicity"
+                self.workflow["edges"].append(added)
+
+    def plan(self, draft, calls=None):
+        def call(_agent, system, prompt, **_kwargs):
+            self.assertIn("requirement_task_indexes", system)
+            self.assertIn("NEVER combine tasks assigned to different people", system)
+            if calls is not None:
+                calls.append(prompt)
+            return {"content": json.dumps(draft)}
+
+        with patch.dict(os.environ, TEST_ENV):
+            return plan_workflow(self.workflow["project"], self.workflow["resources"], PLANNER, model_call=call)
+
+    def test_four_people_keep_their_work_and_exported_task_content(self):
+        original = deepcopy(self.workflow)
+        result = self.plan(self.workflow)
+        self.assertEqual(self.workflow, original)
+        members = {member["id"]: member["name"] for member in result["project"]["members"]}
+        self.assertEqual(list(members.values()), ["Maya", "Leo", "Nina", "Sam"])
+        assignments = {}
+        for node in result["nodes"]:
+            if node["type"] != "agent_task":
+                continue
+            config = node["config"]
+            for index in config["requirement_task_indexes"]:
+                task = self.tasks[index - 1]
+                assignments[task["title"]] = members[config["owner_id"]]
+                self.assertIn(task["description"], config["instructions"])
+                self.assertIn(task["acceptance"], config["acceptance"])
+                self.assertIn(task["title"], node["label"])
+            self.assertNotIn("通勤", config["instructions"])
+            if config["output_format"] == "csv":
+                self.assertIn("list of row objects", config["instructions"])
+        self.assertEqual(assignments, {"汇总": "Maya", "场地": "Leo", "清单": "Leo", "预算": "Nina", "排班": "Nina", "宣传": "Sam"})
+        with zipfile.ZipFile(io.BytesIO(build_bundle(result))) as archive:
+            exported = json.loads(archive.read("workflow.json"))
+            self.assertEqual(exported, result)
+            task_guide = next(archive.read(path).decode() for path in archive.namelist() if path.endswith("-publicity.md"))
+            self.assertIn("Sam 负责宣传", task_guide)
+
+    def test_wrong_or_missing_owner_mapping_gets_bounded_repair(self):
+        for mutation in ("wrong_owner", "missing_mapping", "missing_task", "duplicate_node", "different_owners"):
+            draft = deepcopy(self.workflow)
+            nodes = {node["id"]: node for node in draft["nodes"]}
+            if mutation == "wrong_owner":
+                nodes["publicity"]["config"]["owner_id"] = "member-1"
+            elif mutation == "missing_mapping":
+                nodes["publicity"]["config"].pop("requirement_task_indexes")
+            elif mutation == "missing_task":
+                nodes["research"]["config"]["requirement_task_indexes"] = [2]
+            elif mutation == "duplicate_node":
+                nodes["synthesis"]["config"]["requirement_task_indexes"].append(6)
+            else:
+                nodes["synthesis"]["config"]["requirement_task_indexes"] = [1, 6]
+                nodes["publicity"]["config"]["requirement_task_indexes"] = []
+            calls = []
+            with self.subTest(mutation=mutation), self.assertRaises(PlanningError) as raised:
+                self.plan(draft, calls)
+            self.assertEqual(len(calls), 3)
+            self.assertTrue(any(issue["code"] == "requirement_assignment" for issue in raised.exception.issues))
+            self.assertIn("requirement_assignment", calls[1])
+
+    def test_invalid_indexes_and_review_node_cannot_satisfy_task_coverage(self):
+        for indexes in ([0], [7], [-1], [True], [1.5], ["6"], [[6]], [6, 6], None):
+            draft = deepcopy(self.workflow)
+            next(node for node in draft["nodes"] if node["id"] == "publicity")["config"]["requirement_task_indexes"] = indexes
+            with self.subTest(indexes=indexes), self.assertRaises(PlanningError) as raised:
+                self.plan(draft)
+            self.assertTrue(any(issue["code"] == "requirement_assignment" for issue in raised.exception.issues))
+        draft = deepcopy(self.workflow)
+        next(node for node in draft["nodes"] if node["id"] == "publicity")["config"].pop("requirement_task_indexes")
+        next(node for node in draft["nodes"] if node["id"] == "review")["config"]["requirement_task_indexes"] = [6]
+        with self.assertRaises(PlanningError):
+            self.plan(draft)
+
+    def test_multiple_analyses_share_stable_global_indexes(self):
+        first = self.workflow["resources"][0]
+        first["content"] = json.dumps({**analysis_fixture(), "tasks": self.tasks[:3]})
+        second = {**first, "id": "requirements-analysis-second", "path": "inputs/second-analysis.json",
+                  "content": json.dumps({**analysis_fixture(), "tasks": self.tasks[3:]})}
+        self.workflow["resources"].append(second)
+        next(node for node in self.workflow["nodes"] if node["id"] == "resources")["config"]["resource_ids"].append(second["id"])
+        result = self.plan(self.workflow)
+        publicity = next(node for node in result["nodes"] if node["id"] == "publicity")
+        self.assertEqual(publicity["config"]["requirement_task_indexes"], [6])
+        self.assertEqual(publicity["label"], "宣传")
+
+    def test_owner_matching_preserves_existing_name_capitalization(self):
+        self.workflow["project"]["members"][0]["name"] = "Maya Chen"
+        self.tasks[0]["owner"] = " maya chen "
+        self.workflow["resources"][0]["content"] = json.dumps({**analysis_fixture(), "tasks": self.tasks})
+        result = self.plan(self.workflow)
+        self.assertEqual(result["project"]["members"][0]["name"], "Maya Chen")
+        summary = next(node for node in result["nodes"] if node["id"] == "synthesis")
+        self.assertEqual(summary["config"]["owner_id"], "member-1")
+
+    def test_malformed_reviewed_tasks_cannot_disable_owner_checks(self):
+        for content in ("not JSON", "[]", '{"tasks": []}',
+                        json.dumps({"tasks": [{**self.tasks[0], "owner": ["Maya"]}]}),
+                        json.dumps({"tasks": [{**self.tasks[0], "title": ""}]})):
+            self.workflow["resources"][0]["content"] = content
+            with self.subTest(content=content), patch.dict(os.environ, TEST_ENV), self.assertRaises(PlanningError) as raised:
+                plan_workflow(self.workflow["project"], self.workflow["resources"], PLANNER,
+                              model_call=lambda *_a, **_k: self.fail("Malformed reviewed input must not call the model"))
+            self.assertEqual(raised.exception.status, 400)
 
 
 if __name__ == "__main__":

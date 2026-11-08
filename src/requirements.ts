@@ -1,5 +1,6 @@
 import { assertSafeWorkflow } from './model.ts';
 import type { Workflow, Resource } from './model.ts';
+import { ownerName, ownersFromRequirements } from './ownership.ts';
 
 export type RequirementDocument = {
   filename: string;
@@ -14,7 +15,13 @@ export type RequirementAnalysis = {
   project_name: string;
   goal: string;
   deliverables: string[];
-  tasks: { title: string; description: string; acceptance: string; source_pages: number[] }[];
+  tasks: {
+    title: string;
+    description: string;
+    acceptance: string;
+    source_pages: number[];
+    owner?: string;
+  }[];
   constraints: string[];
   missing_information: string[];
 };
@@ -29,6 +36,17 @@ export function withRequirements(
     deliverables: analysis.deliverables.map((x) => x.trim()).filter(Boolean),
     constraints: analysis.constraints.map((x) => x.trim()).filter(Boolean),
     missing_information: analysis.missing_information.map((x) => x.trim()).filter(Boolean),
+    tasks: analysis.tasks.map((task) => ({
+      ...task,
+      ...(task.owner === undefined
+        ? {}
+        : {
+            owner:
+              task.owner === '' || (typeof task.owner === 'string' && !task.owner.trim())
+                ? ''
+                : ownerName(task.owner),
+          }),
+    })),
   };
   if (
     (!wf.project.name.trim() || /^untitled project$/i.test(wf.project.name)) &&
@@ -69,7 +87,7 @@ export function withRequirements(
       analysis.tasks
         .map(
           (t, i) =>
-            `${i + 1}. ${t.title}: ${t.description}\nAcceptance: ${t.acceptance}${t.source_pages.length ? `\nSource pages: ${t.source_pages.join(', ')}` : ''}`,
+            `${i + 1}. ${t.title}: ${t.description}${t.owner ? `\nOwner: ${t.owner}` : ''}\nAcceptance: ${t.acceptance}${t.source_pages.length ? `\nSource pages: ${t.source_pages.join(', ')}` : ''}`,
         )
         .join('\n'),
     analysis.constraints.length ? 'Constraints:\n' + analysis.constraints.join('\n') : '',
@@ -89,6 +107,10 @@ export function withRequirements(
           : wf.project.name,
       goal,
       deliverable: analysis.deliverables.filter((x) => x.trim()).join('; '),
+      members: ownersFromRequirements(
+        wf.project.members,
+        analysis.tasks.flatMap((task) => (task.owner ? [task.owner] : [])),
+      ),
     },
     resources: [
       ...wf.resources.filter((r) => r.id !== sourceId && r.id !== analysisId),

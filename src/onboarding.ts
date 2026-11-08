@@ -57,7 +57,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'project',
     page: 'project',
-    target: '.project-settings .member-row',
+    target: '.project-settings',
   },
   {
     id: 'planner',

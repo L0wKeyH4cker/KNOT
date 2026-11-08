@@ -7,7 +7,7 @@ const steps = [
   ['Decide what happens next', '/workspace'],
   ['Give every task a clear brief', '/workspace'],
   ['Choose the right AI for each job', '/workspace/agents'],
-  ['Bring your people and materials', '/workspace/project'],
+  ['Bring your project materials', '/workspace/project'],
   ['Let a project brief be your starting point', '/workspace/designer'],
   ['Check your work before exporting', '/workspace/check'],
   ['Take the workflow with you', '/workspace'],

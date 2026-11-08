@@ -22,14 +22,12 @@ test('sidebar views share the same shell and preserve edits, canvas and browser 
     .poll(() => page.locator('.react-flow__viewport').getAttribute('style'))
     .toContain('scale(1)');
   const viewport = await page.locator('.react-flow__viewport').getAttribute('style');
-  const positions = await page
-    .locator('.react-flow__node')
-    .evaluateAll((nodes) =>
-      nodes.map((node) => ({
-        id: node.getAttribute('data-id'),
-        style: (node as HTMLElement).style.transform,
-      })),
-    );
+  const positions = await page.locator('.react-flow__node').evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      id: node.getAttribute('data-id'),
+      style: (node as HTMLElement).style.transform,
+    })),
+  );
   await page.evaluate(() => {
     (window as any).__workspaceShell = {
       header: document.querySelector('.app-header'),
@@ -39,6 +37,7 @@ test('sidebar views share the same shell and preserve edits, canvas and browser 
   for (const [label, panel] of [
     ['Agents', 'agents'],
     ['Project settings', 'project'],
+    ['Costs & split', 'billing'],
     ['Saved projects', 'saved'],
     ['Help & shortcuts', 'help'],
   ]) {
@@ -74,14 +73,12 @@ test('sidebar views share the same shell and preserve edits, canvas and browser 
   await expect(page.getByTestId('workflow-canvas')).toBeVisible();
   await expect(page.locator('.react-flow__viewport')).toHaveAttribute('style', viewport!);
   expect(
-    await page
-      .locator('.react-flow__node')
-      .evaluateAll((nodes) =>
-        nodes.map((node) => ({
-          id: node.getAttribute('data-id'),
-          style: (node as HTMLElement).style.transform,
-        })),
-      ),
+    await page.locator('.react-flow__node').evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: node.getAttribute('data-id'),
+        style: (node as HTMLElement).style.transform,
+      })),
+    ),
   ).toEqual(positions);
 });
 
@@ -91,6 +88,7 @@ test('sidebar icons explain themselves on hover and keyboard focus', async ({ pa
     'Workflow canvas',
     'Agents',
     'Project settings',
+    'Costs & split',
     'Saved projects',
     'Help & shortcuts',
   ]) {
@@ -117,6 +115,7 @@ test('small screens retain the sidebar while switching views without horizontal 
   for (const [label, panel] of [
     ['Agents', 'agents'],
     ['Project settings', 'project'],
+    ['Costs & split', 'billing'],
     ['Saved projects', 'saved'],
     ['Help & shortcuts', 'help'],
   ]) {

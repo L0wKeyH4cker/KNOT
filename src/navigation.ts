@@ -6,6 +6,7 @@ const routes = {
   new: '/new',
   saved: '/projects',
   project: '/workspace/project',
+  billing: '/workspace/costs',
   agents: '/workspace/agents',
   planner: '/workspace/designer',
   check: '/workspace/check',

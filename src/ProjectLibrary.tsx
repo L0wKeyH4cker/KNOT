@@ -42,8 +42,8 @@ function DeleteConfirmation({
       </span>
       <h3 id={title}>Delete this project?</h3>
       <p id={description}>
-        <strong>{project.project.name}</strong> and its saved workflow will be removed from this
-        browser. This cannot be undone.
+        <strong>{project.project.name}</strong>, its saved workflow, and its cost ledger will be
+        removed from this browser. Export any cost records you need first. This cannot be undone.
       </p>
       {failed && (
         <p className="delete-project-error" role="alert">
@@ -112,9 +112,7 @@ export default function ProjectLibrary({
               </span>
               <span className="saved-project-info">
                 <strong>{project.project.name}</strong>
-                <small>
-                  {project.project.members.length} members · {project.nodes.length} blocks
-                </small>
+                <small>{project.nodes.length} blocks</small>
               </span>
             </a>
             <button

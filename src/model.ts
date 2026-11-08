@@ -30,6 +30,7 @@ export type Config = {
   resource_ids?: string[];
   agent_id?: string;
   owner_id?: string;
+  requirement_task_indexes?: number[];
   instructions?: string;
   acceptance?: string;
   output_format?: 'markdown' | 'json' | 'csv';
@@ -137,11 +138,7 @@ export function emptyWorkflow(): Workflow {
       name: 'Untitled project',
       goal: '',
       deliverable: '',
-      members: [0, 1, 2].map((i) => ({
-        id: `member_${i + 1}`,
-        name: `Member ${String.fromCharCode(65 + i)}`,
-        skills: '',
-      })),
+      members: [{ id: 'project-owner', name: 'Project owner', skills: '' }],
     },
     agents: [],
     nodes: [],
@@ -313,6 +310,13 @@ export function parseWorkflow(value: unknown): Workflow {
     finite(position.x, 'Block x');
     finite(position.y, 'Block y');
     const c = object(n.config, 'Block configuration');
+    if (
+      c.requirement_task_indexes !== undefined &&
+      list(c.requirement_task_indexes, 'Requirement task indexes').some(
+        (index) => typeof index !== 'number' || !Number.isInteger(index) || index < 1,
+      )
+    )
+      throw Error('Requirement task indexes must be positive whole numbers.');
     for (const key of [
       'agent_id',
       'owner_id',
@@ -437,9 +441,10 @@ function apiErrorMessage(payload: unknown, status: number): string {
   const fallback = `Server error (${status})`;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return fallback;
   const error = payload as Record<string, unknown>;
-  const message = [error.error, error.message].find(
-    (value): value is string => typeof value === 'string' && Boolean(value.trim()),
-  ) || fallback;
+  const message =
+    [error.error, error.message].find(
+      (value): value is string => typeof value === 'string' && Boolean(value.trim()),
+    ) || fallback;
   const details: string[] = [];
   const seen = new Set<string>();
   if (Array.isArray(error.issues)) {

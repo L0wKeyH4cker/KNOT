@@ -18,6 +18,7 @@ from .providers import ProviderError, complete
 from .security import MAX_FILE_BYTES, redact, safe_path, register_secret, resolve_path
 from .tools import ToolRunner, read_limited
 from .validation import validate_workflow
+from .usage import new_entry, record_event, usage_report
 
 TERMINAL = {"succeeded", "failed", "blocked", "skipped"}
 
@@ -111,13 +112,14 @@ class Engine:
                       "project": {"id": workflow["project"]["id"], "name": workflow["project"]["name"]},
                       "nodes": {nid: {"status": "pending", "attempts": 0, "label": n["label"], "type": n["type"],
                                       "agent_id": n["config"].get("agent_id"), "agent_name": self.agents.get(n["config"].get("agent_id"), {}).get("name", "")}
-                                for nid, n in self.nodes.items()}, "results": {}, "events": [], "last_events": [], "warnings": [i for i in issues if i["severity"] == "warning"]}
+                                for nid, n in self.nodes.items()}, "results": {}, "events": [], "last_events": [], "usage_ledger": {}, "warnings": [i for i in issues if i["severity"] == "warning"]}
         if self.execution:
             self.state["execution"] = copy.deepcopy(self.execution)
 
     def _save(self) -> None:
         with self.lock:
             self.state["updated_at"] = now()
+            self._ensure_usage_ledger()
             temp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
             # This directory was checked by safe_path; recheck before each write.
             safe_path(self.root, self.state_path.relative_to(self.root).as_posix(), ("logs",))
@@ -134,7 +136,51 @@ class Engine:
                     if attempt == 4:
                         raise
                     time.sleep(0.02 * (2 ** attempt))
+            self._save_usage_report()
             self._save_progress()
+
+    def _ensure_usage_ledger(self) -> None:
+        if "usage_ledger" in self.state:
+            return
+        self.state["usage_ledger"] = {}
+        # Never infer historical charges from successful results or event logs.
+        for nid, item in self.state["nodes"].items():
+            node = self.nodes[nid]
+            if node["type"] != "agent_task" or not item.get("attempts"):
+                continue
+            entry = new_entry(self.state, self.workflow, node, item["attempts"], self.mode,
+                              self.execution, item.get("started_at", self.state["started_at"]), legacy=True)
+            entry["status"] = item["status"] if item["status"] in ("running", "succeeded", "failed") else "unknown"
+            self.state["usage_ledger"][entry["id"]] = entry
+
+    def _save_usage_report(self) -> None:
+        try:
+            path = safe_path(self.root, "logs/usage-report.json", ("logs",))
+            temporary = safe_path(self.root, "logs/usage-report.json.tmp", ("logs",))
+            temporary.write_text(json.dumps(redact(usage_report(self.state, self.workflow)), ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary.replace(path)
+        except (OSError, ValueError):
+            warning = {"severity": "warning", "code": "usage_report",
+                       "message": "Usage report could not be written. Accounting records remain in run-state.json; save again to retry export."}
+            if warning not in self.state["warnings"]:
+                self.state["warnings"].append(warning)
+
+    def _usage_entry_id(self, node: dict) -> str:
+        return f"{self.state['run_id']}:{node['id']}:{self.state['nodes'][node['id']]['attempts']}"
+
+    def _record_usage(self, node: dict, event: dict) -> None:
+        with self.lock:
+            entry = self.state["usage_ledger"][self._usage_entry_id(node)]
+            record_event(entry, event, now())
+            self._save()
+
+    def _finish_usage(self, node: dict, status: str) -> None:
+        if node["type"] != "agent_task":
+            return
+        with self.lock:
+            entry = self.state["usage_ledger"][self._usage_entry_id(node)]
+            entry.update(status=status, updated_at=now())
+            self._save()
 
     def _save_progress(self) -> None:
         """A bounded read model for observers; never include prompts or results."""
@@ -399,6 +445,7 @@ class Engine:
                 prompt,
                 max(0.01, deadline - time.monotonic()),
                 event_callback=lambda event: self._event("coding_event", node["id"], detail=event),
+                usage_callback=lambda event: self._record_usage(node, event),
             )
             if cfg["output_format"] == "json" and reply.get("data") is None:
                 raise ValueError("Task requested JSON but the coding agent returned no structured data")
@@ -443,7 +490,8 @@ class Engine:
                              "output_format": cfg["output_format"], "explicit_inputs": inputs,
                              "output_contract": "Return only a JSON object with content (Markdown or CSV text) and data (structured JSON; use a list of row objects for CSV). Do not invent sources or credentials. Acceptance is descriptive and must also be checked by the human reviewer."}, ensure_ascii=False)
         reply = complete(agent, agent["system_prompt"], prompt, runner.definitions, execute_tool,
-                         timeout=max(0.01, deadline - time.monotonic()), max_tool_rounds=self.limits["max_tool_rounds"])
+                         timeout=max(0.01, deadline - time.monotonic()), max_tool_rounds=self.limits["max_tool_rounds"],
+                         usage_callback=lambda event: self._record_usage(node, event))
         decoded = reply.get("data")
         if isinstance(decoded, dict) and isinstance(decoded.get("content"), str) and "data" in decoded:
             result = {"content": decoded["content"], "data": decoded["data"]}
@@ -529,6 +577,12 @@ class Engine:
         for attempt in range(retries + 1):
             with self.lock:
                 self.state["nodes"][node["id"]]["attempts"] = previous_attempts + attempt + 1
+                if node["type"] == "agent_task":
+                    self._ensure_usage_ledger()
+                    entry = new_entry(self.state, self.workflow, node, previous_attempts + attempt + 1,
+                                      self.mode, self.execution, now())
+                    self.state["usage_ledger"][entry["id"]] = entry
+                    self._save()
             deadline = time.monotonic() + timeout
             try:
                 result = self._execute(node, inputs, deadline)
@@ -536,14 +590,20 @@ class Engine:
                     raise TimeoutError("Task exceeded its deadline")
                 if self.workspace and node["type"] not in ("agent_task", "output"):
                     result["artifacts"] = self.workspace.merge(inputs)
+                self._finish_usage(node, "succeeded")
                 return redact(result)
             except (PermissionError, ValueError, FileNotFoundError):
                 # Configuration/permission failures cannot be repaired by retrying.
+                self._finish_usage(node, "failed")
                 raise
             except Exception as error:
+                self._finish_usage(node, "failed")
                 if attempt >= retries:
                     raise
                 self._event("retry", node["id"], attempt=attempt + 1, error=redact(str(error)))
+            except BaseException:
+                self._finish_usage(node, "unknown")
+                raise
         raise RuntimeError("Retry limit exhausted")
 
     def run(self) -> dict:

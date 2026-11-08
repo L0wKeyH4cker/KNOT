@@ -316,6 +316,18 @@ export default function RequirementIntake({
                   onChange={(e) => updateTask(i, { description: e.target.value })}
                 />
               </Field>
+              <Field
+                label={`Task ${i + 1} owner`}
+                hint="Taken from the requirements. Leave blank if no person is named."
+              >
+                <input
+                  value={task.owner || ''}
+                  maxLength={300}
+                  disabled={locked}
+                  placeholder="Person’s name (optional)"
+                  onChange={(e) => updateTask(i, { owner: e.target.value })}
+                />
+              </Field>
               <Field label={`Task ${i + 1} acceptance criteria`}>
                 <textarea
                   rows={2}
@@ -334,7 +346,7 @@ export default function RequirementIntake({
                 ...analysis,
                 tasks: [
                   ...analysis.tasks,
-                  { title: '', description: '', acceptance: '', source_pages: [] },
+                  { title: '', description: '', acceptance: '', source_pages: [], owner: '' },
                 ],
               })
             }

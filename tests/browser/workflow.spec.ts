@@ -66,7 +66,7 @@ test('create from scratch, drag blocks, connect ports, configure agent and expor
     'Write a concise report from the assigned task.',
   );
   await page.getByLabel('Project name', { exact: true }).fill('Manual canvas test');
-  await page.getByLabel('Team size', { exact: true }).fill('3');
+  await expect(page.getByLabel('Team size', { exact: true })).toHaveCount(0);
   await page.getByLabel('Final deliverable', { exact: true }).fill('A Markdown report');
   await page
     .getByLabel('What are you working on?')

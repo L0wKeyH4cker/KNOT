@@ -38,7 +38,7 @@ class LocalExecutionTests(unittest.TestCase):
     def engine(self, flow, execution=None):
         return Engine(flow, self.root, "local", execution=execution or EXECUTION)
 
-    def worker(self, backend, model, cwd, prompt, timeout, *, event_callback=None):
+    def worker(self, backend, model, cwd, prompt, timeout, *, event_callback=None, usage_callback=None):
         assignment = json.loads(prompt.split("Assigned work:\n", 1)[1])
         task = assignment["task"]["id"]
         with self.call_lock:

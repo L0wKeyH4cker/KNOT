@@ -17,7 +17,7 @@ export const TOUR_COPY: Record<string, { title: string; description: string }> =
   task: {
     title: 'Give every task a clear brief',
     description:
-      'Click a block to set its instructions, expected result, AI agent, and human owner. This panel is where you make a task your own.',
+      'Click a block to set its instructions, expected result, AI agent, and human owner. Enter a name here to add or change that task’s owner.',
   },
   agents: {
     title: 'Choose the right AI for each job',
@@ -25,9 +25,9 @@ export const TOUR_COPY: Record<string, { title: string; description: string }> =
       'Give agents their own roles and instructions. Local workspaces use one coding assistant for every role; direct API mode also supports separate model connections.',
   },
   project: {
-    title: 'Bring your people and materials',
+    title: 'Bring your project materials',
     description:
-      'Project settings hold your goal, deliverables, teammates, and shared files. Keep the team’s context together here.',
+      'Project settings hold your goal, deliverables, and shared files. The Members overview shows who owns each agent task and review step; edit ownership in each block’s settings.',
   },
   planner: {
     title: 'Let a project brief be your starting point',

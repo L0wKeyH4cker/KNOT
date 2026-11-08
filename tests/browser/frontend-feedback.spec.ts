@@ -23,7 +23,8 @@ test('project setup shows required markers and English validation before creatin
 }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Continue to project setup' }).click();
-  await expect(page.locator('.required-mark')).toHaveCount(4);
+  await expect(page.locator('.required-mark')).toHaveCount(3);
+  await expect(page.getByLabel('Team size', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Create project', exact: true }).click();
   await expect(page.getByText('Please enter a project name.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Project name', { exact: true })).toBeFocused();
@@ -34,13 +35,6 @@ test('project setup shows required markers and English validation before creatin
   await page.getByLabel('Project name', { exact: true }).fill('  Feedback project  ');
   await page.getByLabel('Final deliverable', { exact: true }).fill('report.md');
   await page.getByLabel('What are you working on?', { exact: true }).fill('Prepare a report.');
-  for (const value of ['0', '51', '1.5', '']) {
-    await page.getByLabel('Team size', { exact: true }).fill(value);
-    await page.getByRole('button', { name: 'Create project', exact: true }).click();
-    await expect(page.getByText('Team size must be a whole number from 1 to 50.')).toBeVisible();
-    await expect(page.getByLabel('Team size', { exact: true })).toBeFocused();
-  }
-  await page.getByLabel('Team size', { exact: true }).fill('2');
   await page.getByRole('button', { name: 'Create project', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'How would you like to start?' })).toBeVisible();
 });

@@ -40,6 +40,7 @@ import {
   Trash2,
   Cable,
   LoaderCircle,
+  Receipt,
 } from 'lucide-react';
 import Home from './Home';
 import NavigationButton from './NavigationButton';
@@ -51,6 +52,7 @@ import type { OnboardingStatus } from './onboarding';
 import { usePage } from './navigation';
 import BlockNode, { icons } from './BlockNode';
 import Inspector, { Field } from './Inspector';
+import { assignOwner } from './ownership';
 import { AgentsSettings, ProjectSettings } from './Settings';
 import RequirementIntake from './RequirementIntake';
 import { KNOT_STORAGE, KNOT_LIBRARY, migrateLegacyStorage } from './storage';
@@ -86,6 +88,7 @@ const nodeTypes = { block: BlockNode };
 const GuidedTour = lazy(() => import('./GuidedTour'));
 const QuickGuide = lazy(() => import('./QuickGuide'));
 const ProjectLibrary = lazy(() => import('./ProjectLibrary'));
+const CostLedger = lazy(() => import('./CostLedger'));
 const requestedProjectId = new URLSearchParams(window.location.search).get(PROJECT_QUERY);
 const projectTab = requestedProjectId !== null;
 const STORAGE = KNOT_STORAGE,
@@ -128,10 +131,12 @@ function restore() {
   }
 }
 const restored = restore();
-type Modal = 'agents' | 'project' | 'planner' | 'check' | 'saved' | 'help' | 'exported' | null;
+type Modal =
+  'agents' | 'project' | 'billing' | 'planner' | 'check' | 'saved' | 'help' | 'exported' | null;
 const secondaryPages = new Set([
   'agents',
   'project',
+  'billing',
   'planner',
   'check',
   'saved',
@@ -207,7 +212,7 @@ export default function App() {
   });
   const [exportDownloaded, setExportDownloaded] = useState(false);
   const plannerInitialized = useRef(plannerReady);
-  const [draft, setDraft] = useState({ name: '', members: 3, goal: '', deliverable: '' });
+  const [draft, setDraft] = useState({ name: '', goal: '', deliverable: '' });
   const [setupErrors, setSetupErrors] = useState<Partial<Record<keyof typeof draft, string>>>({});
   const updateDraft = (patch: Partial<typeof draft>) => {
     setDraft((value) => ({ ...value, ...patch }));
@@ -940,7 +945,7 @@ export default function App() {
   const startProject = (idea: string) => {
     if (firstVisit) dismissWelcome();
     if (hasProject(wf)) save();
-    setDraft({ name: '', members: 3, goal: idea, deliverable: '' });
+    setDraft({ name: '', goal: idea, deliverable: '' });
     setSetupErrors({});
     setWizard(1);
   };
@@ -1051,6 +1056,14 @@ export default function App() {
                 <Settings2 size={21} />
               </NavigationButton>
               <NavigationButton
+                label="Costs & split"
+                description="Review agent costs and each member’s share."
+                active={modal === 'billing'}
+                onClick={() => setModal('billing')}
+              >
+                <Receipt size={21} />
+              </NavigationButton>
+              <NavigationButton
                 label="Saved projects"
                 description="Browse and open your saved projects."
                 active={modal === 'saved'}
@@ -1089,25 +1102,6 @@ export default function App() {
                   </div>
                 </div>
                 <div className="project-actions">
-                  <div
-                    className="avatar-stack"
-                    onClick={() => setModal('project')}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && setModal('project')}
-                    aria-label="Edit team"
-                  >
-                    {wf.project.members.slice(0, 4).map((m, i) => (
-                      <span key={m.id} title={m.name} className={`avatar avatar-${i % 4}`}>
-                        {m.name
-                          .split(' ')
-                          .map((x) => x[0])
-                          .slice(0, 2)
-                          .join('')}
-                      </span>
-                    ))}
-                    <span className="team-count">{wf.project.members.length} members</span>
-                  </div>
                   <button className="secondary" onClick={save}>
                     <Save size={15} />
                     Save
@@ -1370,6 +1364,7 @@ export default function App() {
                     onChange={(next) =>
                       change({ ...wf, nodes: wf.nodes.map((n) => (n.id === next.id ? next : n)) })
                     }
+                    onOwnerChange={(name) => change(assignOwner(wf, node.id, name))}
                     onClose={() => setSelected(null)}
                     onDuplicate={duplicate}
                     onDelete={remove}
@@ -1390,6 +1385,7 @@ export default function App() {
                       {
                         agents: 'Meet your agents',
                         project: 'Project settings',
+                        billing: 'Costs & split',
                         planner: 'AI workflow designer',
                         check: 'Workflow check',
                         saved: 'Your project library',
@@ -1421,7 +1417,14 @@ export default function App() {
                       onCredentialsChange={setCredentials}
                     />
                   )}
-                  {modal === 'project' && <ProjectSettings wf={wf} change={change} />}
+                  {modal === 'project' && (
+                    <ProjectSettings wf={wf} change={change} onCosts={() => setModal('billing')} />
+                  )}
+                  {modal === 'billing' && (
+                    <Suspense fallback={<div className="loading">Loading cost ledger…</div>}>
+                      <CostLedger key={wf.project.id} wf={wf} />
+                    </Suspense>
+                  )}
                   {modal === 'planner' && (
                     <RequirementIntake
                       wf={intakeProject || wf}
@@ -1670,14 +1673,6 @@ export default function App() {
                       const next = emptyWorkflow();
                       next.project.name = draft.name.trim() || 'Untitled project';
                       next.project.goal = draft.goal;
-                      next.project.members = Array.from(
-                        { length: Math.min(50, Math.max(1, draft.members || 3)) },
-                        (_, i) => ({
-                          id: `member_${i + 1}`,
-                          name: `Member ${i < 26 ? String.fromCharCode(65 + i) : i + 1}`,
-                          skills: '',
-                        }),
-                      );
                       setIntakeProject(next);
                       setModal('planner');
                     }}
@@ -1697,12 +1692,6 @@ export default function App() {
                       e.preventDefault();
                       const errors: typeof setupErrors = {};
                       if (!draft.name.trim()) errors.name = 'Please enter a project name.';
-                      if (
-                        !Number.isInteger(draft.members) ||
-                        draft.members < 1 ||
-                        draft.members > 50
-                      )
-                        errors.members = 'Team size must be a whole number from 1 to 50.';
                       if (!draft.deliverable.trim())
                         errors.deliverable = 'Please enter a final deliverable.';
                       if (!draft.goal.trim())
@@ -1721,11 +1710,6 @@ export default function App() {
                         name: draft.name.trim(),
                         goal: draft.goal.trim(),
                         deliverable: draft.deliverable.trim(),
-                        members: Array.from({ length: draft.members }, (_, i) => ({
-                          id: `member_${i + 1}`,
-                          name: `Member ${i < 26 ? String.fromCharCode(65 + i) : i + 1}`,
-                          skills: '',
-                        })),
                       };
                       change(next);
                       setWizard(2);
@@ -1741,28 +1725,15 @@ export default function App() {
                         onChange={(e) => updateDraft({ name: e.target.value })}
                       />
                     </Field>
-                    <div className="form-grid">
-                      <Field label="Team size" error={setupErrors.members}>
-                        <input
-                          name="members"
-                          type="number"
-                          min={1}
-                          max={50}
-                          required
-                          value={draft.members}
-                          onChange={(e) => updateDraft({ members: Number(e.target.value) })}
-                        />
-                      </Field>
-                      <Field label="Final deliverable" error={setupErrors.deliverable}>
-                        <input
-                          name="deliverable"
-                          required
-                          placeholder="e.g. Research report + CSV"
-                          value={draft.deliverable}
-                          onChange={(e) => updateDraft({ deliverable: e.target.value })}
-                        />
-                      </Field>
-                    </div>
+                    <Field label="Final deliverable" error={setupErrors.deliverable}>
+                      <input
+                        name="deliverable"
+                        required
+                        placeholder="e.g. Research report + CSV"
+                        value={draft.deliverable}
+                        onChange={(e) => updateDraft({ deliverable: e.target.value })}
+                      />
+                    </Field>
                     <Field label="What are you working on?" error={setupErrors.goal}>
                       <textarea
                         name="goal"

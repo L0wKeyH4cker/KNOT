@@ -333,9 +333,11 @@ def _usage_summary(value: Any) -> dict:
 
 
 class _Transcript:
-    def __init__(self, backend: str, callback: Callable | None):
+    def __init__(self, backend: str, callback: Callable | None, usage_callback: Callable | None = None):
         self.backend = backend
         self.callback = callback
+        self.usage_callback = usage_callback
+        self.model: str | None = None
         self.final: Any = None
         self.finished = False
         self.error: str | None = None
@@ -352,6 +354,8 @@ class _Transcript:
         if not isinstance(item, dict):
             return
         kind = item.get("type", "")
+        if kind == "system" and item.get("subtype") == "init" and isinstance(item.get("model"), str):
+            self.model = item["model"]
         event = {"backend": self.backend, "event": sanitize_text(kind, 100)}
         activities = []
         self.event_count += 1
@@ -410,6 +414,14 @@ class _Transcript:
                         message = _public_message(block.get("text"))
                         if message:
                             activities.append({"kind": "message", "text": message})
+        # Accounting is independent of bounded activity logging and is emitted
+        # even for an error terminal or an unusable completion record.
+        terminal = kind in ("turn.completed", "turn.failed", "error") if self.backend == "codex" else kind == "result"
+        if self.usage_callback and terminal:
+            self.usage_callback({"event": "terminal", "call_id": "cli", "protocol": self.backend,
+                                 "provider": self.backend, "usage": item.get("usage"), "model": self.model,
+                                 "estimated_cost_usd": item.get("total_cost_usd") if self.backend == "claude" else None,
+                                 "terminal_success": self.finished and not self.error})
         if self.callback and self.event_count <= 5000:
             if self.session_id:
                 event["session_id"] = sanitize_text(self.session_id, 200)
@@ -433,7 +445,7 @@ class _Transcript:
 
 
 def run_coding_task(backend: str, model: str, cwd: Path, prompt: str, timeout: float,
-                    *, event_callback: Callable | None = None) -> dict:
+                    *, event_callback: Callable | None = None, usage_callback: Callable | None = None) -> dict:
     """Run one independent local CLI session, with bounded output and lifetime."""
     _validate_backend(backend)
     if not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
@@ -444,6 +456,9 @@ def run_coding_task(backend: str, model: str, cwd: Path, prompt: str, timeout: f
     if not isinstance(prompt, str) or len(prompt.encode("utf-8")) > 8_000_000:
         raise ValueError("Coding task prompt must be text smaller than 8 MB")
     command = _command(backend) + _arguments(backend, model)
+    if usage_callback:
+        usage_callback({"event": "request_started", "call_id": "cli", "provider": backend,
+                        "protocol": backend, "model": model})
     environment = dict(os.environ)
     # The launcher already found a working interpreter, often a local .venv or
     # Miniconda on Windows. Make it available to the commands the agent runs.
@@ -509,7 +524,7 @@ def run_coding_task(backend: str, model: str, cwd: Path, prompt: str, timeout: f
     for worker in readers + [writer]:
         worker.start()
     deadline = time.monotonic() + timeout
-    transcript = _Transcript(backend, event_callback)
+    transcript = _Transcript(backend, event_callback, usage_callback)
     pending = b""
     diagnostic = b""
     size = 0

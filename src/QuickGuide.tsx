@@ -49,7 +49,7 @@ const steps = [
     image: 'task',
     alt: 'The Understand the people task with its assigned agent, human owner, instructions, and acceptance criteria.',
     tips: [
-      'Select a block to choose its agent and human owner, then write task instructions and acceptance criteria.',
+      'Select a block to choose its agent and enter its human owner. You can reuse a name or add someone here.',
       'Choose an output format. Enable only the tools and file paths that this task needs.',
     ],
   },
@@ -65,11 +65,11 @@ const steps = [
   },
   {
     id: 'project',
-    label: 'People & inputs',
+    label: 'Project & inputs',
     image: 'project',
-    alt: 'Project settings with the campus travel goal, deliverable, three team members, and example interview resources.',
+    alt: 'Project settings with the campus travel goal, deliverable, Members overview of task and review ownership, and input resources.',
     tips: [
-      'Set the project goal and final deliverable, then add your teammates and their skills.',
+      'Use the Members overview to review each person’s agent tasks and approval steps. Edit ownership directly in each block’s settings.',
       'Add text or CSV resources here and connect a Shared Resource block to the tasks that need them.',
     ],
   },

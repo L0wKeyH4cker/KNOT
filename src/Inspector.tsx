@@ -11,7 +11,7 @@ import {
 import { KINDS, TOOLS } from './model';
 import type { Block, Workflow, Config, Mapping } from './model';
 import { icons } from './BlockNode';
-import { cloneElement, isValidElement, useId } from 'react';
+import { cloneElement, isValidElement, useId, useState } from 'react';
 export function Field({
   label,
   children,
@@ -89,10 +89,72 @@ export function CheckList({
     </div>
   );
 }
+function OwnerField({
+  name,
+  names,
+  reviewer,
+  onChange,
+}: {
+  name: string;
+  names: string[];
+  reviewer: boolean;
+  onChange: (name: string) => void;
+}) {
+  const [draft, setDraft] = useState(name);
+  const [error, setError] = useState('');
+  const optionsId = useId();
+  const commit = () => {
+    const value = draft.trim();
+    if (!value) {
+      setError(reviewer ? 'Enter a reviewer name.' : 'Enter an owner name.');
+      return;
+    }
+    try {
+      if (value !== name) onChange(value);
+      setDraft(value);
+      setError('');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not update the owner.');
+    }
+  };
+  return (
+    <>
+      <Field
+        label={reviewer ? 'Reviewer' : 'Human owner'}
+        hint="Choose a name or enter a new one for this task."
+        error={error}
+      >
+        <input
+          list={optionsId}
+          value={draft}
+          maxLength={300}
+          placeholder={reviewer ? 'Reviewer name' : 'Owner name'}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setError('');
+          }}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+      </Field>
+      <datalist id={optionsId}>
+        {names.map((ownerName) => (
+          <option key={ownerName} value={ownerName} />
+        ))}
+      </datalist>
+    </>
+  );
+}
 export default function Inspector({
   node,
   wf,
   onChange,
+  onOwnerChange,
   onClose,
   onDuplicate,
   onDelete,
@@ -101,6 +163,7 @@ export default function Inspector({
   node: Block;
   wf: Workflow;
   onChange: (n: Block) => void;
+  onOwnerChange: (name: string) => void;
   onClose: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -113,17 +176,15 @@ export default function Inspector({
     .filter((e) => e.target === node.id && e.kind === 'data')
     .map((e) => wf.nodes.find((n) => n.id === e.source)!)
     .filter(Boolean);
+  const ownerName = wf.project.members.find((member) => member.id === c.owner_id)?.name || '';
   const owner = (
-    <Field label={node.type === 'human_review' ? 'Reviewer' : 'Human owner'}>
-      <select value={c.owner_id || ''} onChange={(e) => set({ owner_id: e.target.value })}>
-        <option value="">Choose a member</option>
-        {wf.project.members.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.name}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <OwnerField
+      key={`${node.id}:${c.owner_id}:${ownerName}`}
+      name={ownerName}
+      names={[...new Set(wf.project.members.map((member) => member.name))]}
+      reviewer={node.type === 'human_review'}
+      onChange={onOwnerChange}
+    />
   );
   return (
     <aside className="inspector">

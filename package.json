@@ -10,7 +10,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test:browser": "playwright test",
-    "test:model": "node --experimental-strip-types --test tests/model-validation.test.mjs tests/api-errors.test.mjs tests/requirements-validation.test.mjs tests/storage-migration.test.mjs tests/project-storage.test.mjs tests/connections.test.mjs tests/onboarding.test.mjs",
+    "test:model": "node --experimental-strip-types --test tests/model-validation.test.mjs tests/api-errors.test.mjs tests/requirements-validation.test.mjs tests/storage-migration.test.mjs tests/project-storage.test.mjs tests/connections.test.mjs tests/onboarding.test.mjs tests/billing.test.mjs",
     "format": "prettier --write src tests/browser scripts/dev.mjs *.ts *.json index.html"
   },
   "dependencies": {

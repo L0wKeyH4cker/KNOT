@@ -191,8 +191,21 @@ def _parse_result(content: str, usage: list[dict]) -> dict:
     return redact({"content": content, "data": data, "usage": usage})
 
 
+def _metered_post(url, headers, payload, timeout, callback, call_id, provider, protocol):
+    """Persist usage before inspecting the response or executing its tools."""
+    metadata = {"call_id": str(call_id), "provider": provider, "protocol": protocol,
+                "model": payload.get("model", "")}
+    if callback:
+        callback({**metadata, "event": "request_started"})
+    response = _post(url, headers, payload, timeout)
+    if callback:
+        callback({**metadata, "event": "response", "usage": response.get("usage"),
+                  "response_id": response.get("id"), "model": response.get("model", metadata["model"])})
+    return response
+
+
 def _responses_complete(base, credential, model, system, prompt, tools, tool_executor,
-                        deadline, max_tool_rounds):
+                        deadline, max_tool_rounds, usage_callback=None):
     """Stateless Responses tool loop; reasoning stays only in provider context."""
     history = [{"role": "user", "content": prompt}]
     definitions = [{"type": "function", "name": item["name"], "description": item["description"],
@@ -205,7 +218,8 @@ def _responses_complete(base, credential, model, system, prompt, tools, tool_exe
             raise TimeoutError("Task model/tool deadline exceeded")
         payload = {"model": model, "instructions": system, "input": copy.deepcopy(history),
                    "tools": definitions, "store": False, "include": ["reasoning.encrypted_content"]}
-        response = _post(base + "/responses", {"Authorization": "Bearer " + credential}, payload, remaining)
+        response = _metered_post(base + "/responses", {"Authorization": "Bearer " + credential}, payload,
+                                 remaining, usage_callback, round_number + 1, "openai", "responses")
         if time.monotonic() >= deadline:
             raise TimeoutError("Task model/tool deadline exceeded")
         if response.get("status") != "completed" or response.get("error"):
@@ -275,7 +289,7 @@ def _responses_complete(base, credential, model, system, prompt, tools, tool_exe
 
 def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = None,
              tool_executor: Callable[[str, dict], Any] | None = None,
-             timeout: float = 60, max_tool_rounds: int = 4) -> dict:
+             timeout: float = 60, max_tool_rounds: int = 4, usage_callback: Callable | None = None) -> dict:
     """One isolated conversation, with a bounded tool loop and overall deadline."""
     provider = agent.get("provider")
     if provider not in ("openai", "anthropic"):
@@ -299,7 +313,7 @@ def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = N
     deadline = time.monotonic() + timeout
     if provider == "openai" and parsed.hostname == "api.openai.com" and model.startswith("gpt-6") and tools:
         return _responses_complete(base, credential, model, system, prompt, tools,
-                                   tool_executor, deadline, max_tool_rounds)
+                                   tool_executor, deadline, max_tool_rounds, usage_callback)
     usage = []
     messages = [{"role": "user", "content": prompt}]
     if provider == "openai":
@@ -316,7 +330,8 @@ def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = N
                 payload["thinking"] = {"type": "disabled"}
             if tools:
                 payload["tools"] = [{"type": "function", "function": item} for item in tools]
-            response = _post(base + "/chat/completions", {"Authorization": "Bearer " + credential}, payload, remaining)
+            response = _metered_post(base + "/chat/completions", {"Authorization": "Bearer " + credential}, payload,
+                                     remaining, usage_callback, round_number + 1, provider, "chat")
             if isinstance(response.get("usage"), dict):
                 usage.append({"provider": provider, **response["usage"]})
             try:
@@ -360,7 +375,8 @@ def complete(agent: dict, system: str, prompt: str, tools: list[dict] | None = N
             payload = {"model": model, "system": system, "messages": messages, "max_tokens": 8192}
             if tools:
                 payload["tools"] = [{"name": item["name"], "description": item["description"], "input_schema": item["parameters"]} for item in tools]
-            response = _post(base + "/messages", {"x-api-key": credential, "anthropic-version": "2023-06-01"}, payload, remaining)
+            response = _metered_post(base + "/messages", {"x-api-key": credential, "anthropic-version": "2023-06-01"}, payload,
+                                     remaining, usage_callback, round_number + 1, provider, "messages")
             if isinstance(response.get("usage"), dict):
                 usage.append({"provider": provider, **response["usage"]})
             blocks = response.get("content")

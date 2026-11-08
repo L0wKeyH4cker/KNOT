@@ -104,6 +104,11 @@ export default function ExportRunGuide() {
         the running terminal stops its agents.
       </p>
       <p className="export-guide-help">
+        To review costs, open Costs &amp; split and import <code>logs/usage-report.json</code>
+        from the extracted workspace after running. Confirm billed amounts before sharing a
+        settlement.
+      </p>
+      <p className="export-guide-help">
         Needs Python 3.10+ and your selected assistant installed and signed in. If you use Conda,
         activate your Python environment before running these commands. Full instructions are in
         README.md and START-HERE.md inside the ZIP.

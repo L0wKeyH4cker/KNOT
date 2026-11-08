@@ -8,6 +8,7 @@ import {
   isProjectDeleted,
   prepareProjectForTab,
   projectDraftKey,
+  projectBillingKey,
   projectHref,
   readProjectLibrary,
   saveLibraryProject,
@@ -125,10 +126,14 @@ test('deleting the current project clears it without deleting other projects', (
   writeCurrentProject(storage, a, true);
   saveLibraryProject(storage, a);
   saveLibraryProject(storage, b);
+  storage.setItem(projectBillingKey('a'), 'ledger-a');
+  storage.setItem(projectBillingKey('b'), 'ledger-b');
   deleteLibraryProject(storage, 'a');
   assert.equal(storage.getItem(KNOT_STORAGE), null);
   assert.equal(storage.getItem(projectDraftKey('a')), null);
   assert.equal(findProject(storage, 'a'), null);
+  assert.equal(storage.getItem(projectBillingKey('a')), null);
+  assert.equal(storage.getItem(projectBillingKey('b')), 'ledger-b');
   assert.deepEqual(readProjectLibrary(storage), [b]);
 });
 
@@ -162,6 +167,7 @@ test('a failed deletion restores the original library, draft, and current projec
   const storage = memoryStorage();
   writeCurrentProject(storage, a, true);
   saveLibraryProject(storage, a);
+  storage.setItem(projectBillingKey('a'), 'ledger-a');
   const before = new Map(storage.values);
   const write = storage.setItem;
   let failOnce = true;

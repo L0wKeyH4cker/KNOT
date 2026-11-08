@@ -274,6 +274,7 @@ Discovery stays on this computer: small run pointers and heartbeats are saved un
 - `.knot/tasks/`: separate working copies and drafts for individual tasks.
 - `logs/run-state.json`, `logs/events.jsonl`: task status, review decisions, execution events, and errors.
 - `logs/run-state.progress.json`: small activity/status summary used by the terminal monitor.
+- `logs/usage-report.json`: usage by agent task attempt and responsible person, including failed attempts. Import this file in the editor's **Costs & split** page; importing an updated report does not count an attempt twice.
 - `knot.py`, `knot.cmd`, `knot.sh`: standalone local terminal client; no third-party packages required.
 - `results/project/`: combined project files published by an Output node, after any required review.
 - `results/`: the reports/JSON/CSV mapped on the canvas.
@@ -288,7 +289,15 @@ The local task timeout is {execution['task_timeout_seconds']} seconds. The selec
 
 An unattended run exits with code **2** while waiting for human review. Return with the interactive run command in step 2, or use the exact approval command printed by the runner. The reviewer ID records local acknowledgement, not remote identity verification. No task may approve its own work on the user's behalf.
 
-Keep `workflow.json` and the execution configuration unchanged when resuming a saved run. This version resumes saved Human Review pauses only. After a failed or interrupted run, preserve its logs/drafts and start from a fresh extracted folder; it does not automatically resume a partially completed coding session. Existing state is not silently overwritten.
+Keep `workflow.json` and the execution configuration unchanged when resuming a saved run. Run the same command again to continue a saved Human Review pause. After fixing a failed local task, use `run --retry-failed --interactive` to retry failed tasks while keeping successful results and previous attempts' usage records. An interrupted or otherwise uncertain run requires a fresh extracted folder; preserve the old logs and drafts. Existing state is not silently overwritten.
+
+## Costs and splitting expenses
+
+After a run or retry, open **Costs & split** in the KNOT editor for this same project and import `logs/usage-report.json`. Each attempt keeps the agent and owner recorded when it ran; changing the canvas later does not transfer old expenses. Unknown or partial usage is labeled, never treated as free. Mock runs are simulated and cannot be billed.
+
+CLI-reported monetary values are estimates, not provider invoices. Enter and confirm the actual billed amount, currency, and source for each task attempt. By default its owner pays; mark a shared attempt and select the people who split it equally. Add planning, subscriptions, or other shared expenses separately. Review totals per currency, then export the detailed ledger and member settlement CSV. The confirmed shares add up to the rounded currency total; estimates are excluded from settlement. Nothing charges a card or sends payments.
+
+The cost ledger is stored separately in this browser. Export its JSON backup before moving devices or deleting a project; workflow JSON and runner ZIP do not include this browser ledger. Older runners did not record a complete usage ledger, so their historical costs cannot be reconstructed automatically.
 
 ## Inputs you must provide
 

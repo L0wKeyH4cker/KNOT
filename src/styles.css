@@ -1384,6 +1384,44 @@ kbd {
 .project-settings {
   padding: 26px 28px;
 }
+.member-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.member-overview-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.member-overview-card h3 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+.member-overview-card ul {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.member-overview-card li {
+  display: grid;
+  gap: 4px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.member-overview-card li strong {
+  font-weight: 500;
+}
+.member-overview-card li span {
+  color: var(--muted);
+  font-size: 14px;
+}
 .member-row {
   display: flex;
   gap: 9px;

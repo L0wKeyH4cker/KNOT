@@ -51,7 +51,7 @@ class BundleTests(unittest.TestCase):
         workflow["nodes"][3]["config"]["permissions"]["read"] = ["inputs/example-interviews.md"]
         archive = zipfile.ZipFile(io.BytesIO(build_bundle(workflow)))
         self.assertEqual(json.loads(archive.read("workflow.json")), workflow)
-        for expected in ("run.py", "runtime/engine.py", "requirements.txt", ".env.example", "start.bat", "start.sh", "README.md", "inputs/example-survey.csv"):
+        for expected in ("run.py", "runtime/engine.py", "runtime/usage.py", "requirements.txt", ".env.example", "start.bat", "start.sh", "README.md", "inputs/example-survey.csv"):
             self.assertIn(expected, archive.namelist())
         for info in archive.infolist():
             self.assertNotIn("..", Path(info.filename).parts)
@@ -130,10 +130,18 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(first.returncode, 2, first.stdout + first.stderr)
             state = json.loads((root / "logs/run-state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["status"], "waiting_review")
+            usage = json.loads((root / "logs/usage-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(usage["kind"], "knot-usage")
+            self.assertEqual(usage["project"]["id"], workflow["project"]["id"])
+            self.assertEqual(len(usage["entries"]), 3)
+            self.assertTrue(all(entry["usage_status"] == "simulated" for entry in usage["entries"]))
+            self.assertTrue(all("estimated_cost" not in entry for entry in usage["entries"]))
             self.assertFalse((root / "results/report.md").exists())
             self.assertFalse((root / "results/summary.csv").exists())
             second = subprocess.run([sys.executable, "run.py", "--mode", "mock", "--resume", "--review", "review", "--decision", "approve", "--reviewer", "member-3"], cwd=root, capture_output=True, text=True, timeout=20, env=environment)
             self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            resumed_usage = json.loads((root / "logs/usage-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(resumed_usage["entries"], usage["entries"])
             self.assertIn("MOCK", (root / "results/report.md").read_text(encoding="utf-8"))
             self.assertIn("Walk", (root / "results/summary.csv").read_text(encoding="utf-8-sig"))
 

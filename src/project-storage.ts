@@ -5,6 +5,7 @@ import { KNOT_LIBRARY, KNOT_STORAGE } from './storage.ts';
 export const PROJECT_QUERY = 'project';
 export const PROJECT_DRAFT_PREFIX = 'knot.project.v1.';
 export const PROJECT_DELETED_PREFIX = 'knot.deleted-project.v1.';
+export const projectBillingKey = (id: string) => 'knot.billing.v1.' + encodeURIComponent(id);
 type ReadStorage = Pick<Storage, 'getItem'>;
 type ProjectStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
@@ -89,14 +90,19 @@ export function prepareProjectForTab(
 export function deleteLibraryProject(storage: ProjectStorage, id: string) {
   const remaining = snapshots(storage).filter((project) => project.project.id !== id);
   const current = storage.getItem(KNOT_STORAGE);
-  const previous = [deletedKey(id), KNOT_LIBRARY, projectDraftKey(id), KNOT_STORAGE].map(
-    (key) => [key, storage.getItem(key)] as const,
-  );
+  const previous = [
+    deletedKey(id),
+    KNOT_LIBRARY,
+    projectDraftKey(id),
+    projectBillingKey(id),
+    KNOT_STORAGE,
+  ].map((key) => [key, storage.getItem(key)] as const);
   try {
     // Stop other tabs from recreating a deleted project through a pending autosave.
     storage.setItem(deletedKey(id), 'deleted');
     storage.setItem(KNOT_LIBRARY, JSON.stringify(remaining));
     storage.removeItem(projectDraftKey(id));
+    storage.removeItem(projectBillingKey(id));
     if (parseStored(current)?.project.id === id) storage.removeItem(KNOT_STORAGE);
   } catch (error) {
     for (const [key, value] of previous) {

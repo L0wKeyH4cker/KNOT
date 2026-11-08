@@ -111,7 +111,8 @@ async function modelFixtures(page: Page) {
     const originalMembers = workflow.project.members;
     for (const node of workflow.nodes) {
       const owner = originalMembers.findIndex((member: any) => member.id === node.config.owner_id);
-      if (owner >= 0) node.config.owner_id = request.project.members[owner].id;
+      if (owner >= 0)
+        node.config.owner_id = (request.project.members[owner] || request.project.members[0]).id;
     }
     workflow.project = request.project;
     workflow.resources = request.resources;
@@ -137,7 +138,7 @@ test('upload actual PDF from onboarding, review tasks and preserve requirements 
   await page.goto('/');
   await page.getByRole('button', { name: 'Continue to project setup' }).click();
   await page.getByLabel('Project name', { exact: true }).fill('Document-led project');
-  await page.getByLabel('Team size', { exact: true }).fill('3');
+  await expect(page.getByLabel('Team size', { exact: true })).toHaveCount(0);
   // No manually entered goal or deliverable is needed for this entry point.
   await page.getByRole('button', { name: /^Upload project requirements/ }).click();
   await page.screenshot({
@@ -168,7 +169,9 @@ test('upload actual PDF from onboarding, review tasks and preserve requirements 
   const planned = requests.planRequests[0];
   expect(planned.project.goal).toContain(reviewedTitle);
   expect(planned.project.name).toBe('Document-led project');
-  expect(planned.project.members).toHaveLength(3);
+  expect(planned.project.members).toEqual([
+    { id: 'project-owner', name: 'Project owner', skills: '' },
+  ]);
   expect(
     planned.resources.some((resource: any) => resource.content?.includes(requirementText)),
   ).toBe(true);
@@ -310,7 +313,9 @@ test('home Add requirements creates a new project directly from the reviewed doc
   const generated = await getWorkflow(page);
   expect(generated.project.name).toBe(analysisFixture.project_name);
   expect(generated.project.goal).toContain(analysisFixture.tasks[0].title);
-  expect(generated.project.members).toHaveLength(3);
+  expect(generated.project.members).toEqual([
+    { id: 'project-owner', name: 'Project owner', skills: '' },
+  ]);
   expect(generated.resources).toHaveLength(2);
   expect(
     generated.resources.some((resource: any) => resource.content.includes(requirementText)),

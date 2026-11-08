@@ -15,6 +15,16 @@
 
 任务用 `agent_id` 引用 Agent，用 `owner_id` 引用成员。同一 Agent 可以承担多个任务，同一成员可以负责多个 Agent 的任务。
 
+成员列表是任务负责人和审核人的内部姓名记录，不是账号或权限系统。界面不再单独设置人数、姓名或技能；需求生成和任务里的负责人输入会维护姓名记录，旧工作流的成员 ID 与技能仍保留。需求分析任务可含 `owner`（明确的人名，未指定为空）；有明确分工时，生成节点的 `config.requirement_task_indexes` 用从 1 开始的编号关联已确认任务，规划阶段校验覆盖及负责人一致性。该关联用于生成检查，不影响执行调度。
+
+项目设置保留 **Members** 人工审阅总览，按 `owner_id` 展示每个人的 Agent 任务和审核节点。归属以任务为单位，同一个 `agent_id` 可以对应不同人的任务；不额外引入与任务归属冲突的 Agent 全局负责人。
+
+## 用量与费用账本
+
+费用数据独立于工作流，修改账本不会改变工作流哈希或触发任务重跑。运行状态的 `usage_ledger` 按 `run_id + node_id + attempt` 保存每次尝试，并导出 `logs/usage-report.json`（`kind: "knot-usage"`、`schema_version: "1.0"`）。每条记录包含执行时的 Agent 和负责人快照、执行状态、模型、已报告用量及可选估算金额。历史责任不会跟随画布改名或改负责人重新分配。
+
+前端账本使用 `kind: "knot-billing"`、`schema_version: "1.0"`，保存于 `knot.billing.v1.<encoded project id>`；由 `entries`（执行用量）、`confirmed`（人工核对金额及分摊方式）、`shared`（补录共用费用）组成。用户必须显式导入账本 JSON 才会恢复确认金额；普通用量报告不能夹带确认金额。详情、限制及舍入规则见 [BILLING.md](BILLING.md)。
+
 ## 两种连线
 
 `control` 连线决定执行顺序，不自动授予读取上游内容的权限。普通端口为 `out → in`，Condition 的输出端口为 `true` 和 `false`。

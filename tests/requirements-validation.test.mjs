@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { emptyWorkflow, parseWorkflow } from '../src/model.ts';
+import { emptyWorkflow, newBlock, parseWorkflow } from '../src/model.ts';
 import { withRequirements } from '../src/requirements.ts';
+import { assignOwner } from '../src/ownership.ts';
 
 const document = {
   filename: '项目需求.pdf', source_type: 'pdf', sha256: '12345678' + 'a'.repeat(56), page_count: 2,
@@ -72,4 +73,61 @@ test('empty work and incomplete reviewed tasks are rejected before workflow gene
 test('requirements source cannot persist secret-shaped content', () => {
   const unsafe = { ...document, text: 'A fixture token: sk-proj-TESTONLY00000000000000000000' };
   assert.throws(() => withRequirements(emptyWorkflow(), unsafe, analysis), /API key/);
+});
+
+test('named requirements replace the three placeholders and preserve all four assignments', () => {
+  const original = emptyWorkflow();
+  original.project.members = ['A', 'B', 'C'].map((letter, i) => ({ id: `member_${i + 1}`, name: `Member ${letter}`, skills: '' }));
+  const named = { ...analysis, tasks: [
+    ['汇总', 'Maya Chen'], ['场地', 'Leo Patel'], ['清单', 'Leo Patel'],
+    ['预算', 'Nina Brooks'], ['排班', 'Nina Brooks'], ['宣传', 'Sam Rivera'],
+  ].map(([title, owner]) => ({ ...analysis.tasks[0], title, owner })) };
+  const before = structuredClone(original);
+  const next = withRequirements(original, document, named);
+  assert.deepEqual(next.project.members.map(member => member.name), ['Maya Chen', 'Leo Patel', 'Nina Brooks', 'Sam Rivera']);
+  assert.deepEqual(JSON.parse(next.resources[1].content).tasks.map(task => [task.title, task.owner]), named.tasks.map(task => [task.title, task.owner]));
+  assert.match(next.project.goal, /Owner: Sam Rivera/);
+  assert.deepEqual(original, before);
+  assert.deepEqual(withRequirements(next, document, named).project.members, next.project.members);
+});
+
+test('requirements reuse real people and keep their IDs and skills', () => {
+  const original = emptyWorkflow();
+  original.project.members = [{ id: 'maya-existing', name: 'Maya Chen', skills: 'Writing' }];
+  const named = { ...analysis, tasks: [{ ...analysis.tasks[0], owner: '  maya chen  ' }, { ...analysis.tasks[0], owner: 'Sam Rivera' }] };
+  const next = withRequirements(original, document, named);
+  assert.deepEqual(next.project.members[0], original.project.members[0]);
+  assert.equal(next.project.members.length, 2);
+});
+
+test('direct assignment changes one task, reuses names, and survives save/import', () => {
+  const original = emptyWorkflow();
+  original.nodes = [newBlock('agent_task', { x: 0, y: 0 }, original), newBlock('human_review', { x: 300, y: 0 }, original)];
+  const before = structuredClone(original);
+  const taskId = original.nodes[0].id;
+  const reviewId = original.nodes[1].id;
+  const first = assignOwner(original, taskId, '  Maya Chen  ');
+  assert.equal(first.project.members.find(member => member.id === first.nodes[0].config.owner_id).name, 'Maya Chen');
+  assert.equal(first.nodes[1].config.owner_id, original.nodes[1].config.owner_id);
+  const next = assignOwner(first, reviewId, 'maya chen');
+  assert.equal(next.project.members.length, first.project.members.length);
+  assert.equal(next.nodes[1].config.owner_id, next.nodes[0].config.owner_id);
+  assert.deepEqual(parseWorkflow(JSON.parse(JSON.stringify(next))), next);
+  assert.deepEqual(original, before);
+  for (const name of ['', '   ', 'x'.repeat(301), 'sk-proj-TESTONLY00000000000000000000']) {
+    assert.throws(() => assignOwner(original, taskId, name));
+  }
+});
+
+test('repeated name edits can reclaim unused entries without changing other task owners', () => {
+  let workflow = emptyWorkflow();
+  workflow.nodes = [newBlock('agent_task', { x: 0, y: 0 }, workflow), newBlock('human_review', { x: 300, y: 0 }, workflow)];
+  const reviewOwner = workflow.nodes[1].config.owner_id;
+  for (let index = 0; index < 60; index++) {
+    workflow = assignOwner(workflow, workflow.nodes[0].id, `Owner ${index}`);
+    assert.equal(workflow.nodes[1].config.owner_id, reviewOwner);
+    assert.ok(workflow.project.members.some(member => member.id === reviewOwner));
+    assert.ok(workflow.project.members.length <= 50);
+  }
+  assert.equal(workflow.project.members.find(member => member.id === workflow.nodes[0].config.owner_id).name, 'Owner 59');
 });

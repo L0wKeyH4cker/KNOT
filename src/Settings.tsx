@@ -112,7 +112,15 @@ export function AgentsSettings({
     </div>
   );
 }
-export function ProjectSettings({ wf, change }: { wf: Workflow; change: (w: Workflow) => void }) {
+export function ProjectSettings({
+  wf,
+  change,
+  onCosts,
+}: {
+  wf: Workflow;
+  change: (w: Workflow) => void;
+  onCosts?: () => void;
+}) {
   const updateResource = (id: string, p: Partial<Resource>) =>
     change({ ...wf, resources: wf.resources.map((r) => (r.id === id ? { ...r, ...p } : r)) });
   return (
@@ -140,84 +148,55 @@ export function ProjectSettings({ wf, change }: { wf: Workflow; change: (w: Work
           onChange={(e) => change({ ...wf, project: { ...wf.project, goal: e.target.value } })}
         />
       </Field>
-      <div className="section-label">
-        <Users size={16} />
-        Team members
-      </div>
-      {wf.project.members.map((m, i) => (
-        <div className="member-row" key={m.id}>
-          <span className={`avatar avatar-${i % 4}`}>{m.name.slice(0, 1)}</span>
-          <input
-            aria-label={`Member ${i + 1} name`}
-            value={m.name}
-            onChange={(e) =>
-              change({
-                ...wf,
-                project: {
-                  ...wf.project,
-                  members: wf.project.members.map((x) =>
-                    x.id === m.id ? { ...x, name: e.target.value } : x,
-                  ),
-                },
-              })
-            }
-          />
-          <input
-            aria-label={`Member ${i + 1} skills`}
-            placeholder="Skills (optional)"
-            value={m.skills}
-            onChange={(e) =>
-              change({
-                ...wf,
-                project: {
-                  ...wf.project,
-                  members: wf.project.members.map((x) =>
-                    x.id === m.id ? { ...x, skills: e.target.value } : x,
-                  ),
-                },
-              })
-            }
-          />
-          <button
-            className="icon-button danger"
-            title="Remove member"
-            disabled={wf.project.members.length === 1}
-            onClick={() =>
-              change({
-                ...wf,
-                project: {
-                  ...wf.project,
-                  members: wf.project.members.filter((x) => x.id !== m.id),
-                },
-              })
-            }
-          >
-            <Trash2 size={15} />
-          </button>
+      <section className="members-overview" aria-label="Members overview">
+        <div className="section-label">
+          <Users size={16} />
+          Members
         </div>
-      ))}
-      <button
-        className="text-button"
-        onClick={() =>
-          change({
-            ...wf,
-            project: {
-              ...wf.project,
-              members: [
-                ...wf.project.members,
-                {
-                  id: uid('member'),
-                  name: `Member ${String.fromCharCode(65 + wf.project.members.length)}`,
-                  skills: '',
-                },
-              ],
-            },
-          })
-        }
-      >
-        <Plus size={14} />
-        Add member
-      </button>
+        <p className="muted">
+          Review who owns each agent task and approval step. Edit ownership in each block’s
+          settings.
+        </p>
+        {onCosts && (
+          <button className="text-button" onClick={onCosts}>
+            View costs & split <ArrowUpRight size={14} />
+          </button>
+        )}
+        <div className="member-overview-grid">
+          {wf.project.members.map((member) => {
+            const assignments = wf.nodes.filter(
+              (node) =>
+                (node.type === 'agent_task' || node.type === 'human_review') &&
+                node.config.owner_id === member.id,
+            );
+            return (
+              <article
+                className="member-overview-card"
+                aria-label={`Member ${member.name}`}
+                key={member.id}
+              >
+                <h3>{member.name}</h3>
+                {assignments.length ? (
+                  <ul>
+                    {assignments.map((node) => (
+                      <li key={node.id}>
+                        <strong>{node.label}</strong>
+                        <span>
+                          {node.type === 'human_review'
+                            ? 'Human review'
+                            : `Agent task · ${wf.agents.find((agent) => agent.id === node.config.agent_id)?.name || 'No agent selected'}`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">No assigned tasks.</p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
       <div className="section-label">
         <FolderOpen size={16} />
         Input resources
