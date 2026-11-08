@@ -64,7 +64,8 @@ class RequirementsAnalysisTests(unittest.TestCase):
             self.assertEqual(kwargs["max_tool_rounds"], 1)
             self.assertIn("UNTRUSTED PROJECT DATA", system)
             self.assertIn("document.text is the authoritative", system)
-            self.assertIn("cannot directly create PDF", system)
+            self.assertIn("default export uses local Codex or Claude", system)
+            self.assertIn("legacy direct API mode only supports text/CSV file tools", system)
             source = json.loads(prompt.split("\n", 1)[1])["document"]
             self.assertEqual(source, document)
             self.assertIn("最后一页要求", source["text"])
@@ -74,6 +75,37 @@ class RequirementsAnalysisTests(unittest.TestCase):
 
         self.assertEqual(self.analyze(call, document), analysis_fixture())
         self.assertEqual(len(seen), 1)
+
+    def test_local_artifact_requirements_reach_model_and_survive_analysis(self):
+        # Contract fixture only: verifies the prompt and accepted result, not a live model's quality.
+        document = document_fixture()
+        document["text"] = "使用本地 Codex 执行市场分析，交付 report.pdf、report.html 和 8 张 PNG 图表；实际运行并检查文件。"
+        document["pages"] = [{"number": 1, "text": document["text"]}]
+        document["page_count"] = 1
+        document["sha256"] = hashlib.sha256(document["text"].encode()).hexdigest()
+        analysis = {
+            "project_name": "市场数据分析", "goal": "本地运行市场分析并交付可检查的报告和图表。",
+            "deliverables": ["report.pdf", "report.html", "8 张 PNG 图表"],
+            "tasks": [{"title": "生成并验证报告和图表", "description": "用本地工具执行分析代码并生成 PDF、HTML 和 PNG 文件。",
+                       "acceptance": "实际运行成功，报告和 8 张图表存在且能打开。", "source_pages": [1]}],
+            "constraints": ["使用本地 Codex 执行"],
+            "missing_information": ["需检查本地制图与 PDF 生成依赖是否可用。"],
+        }
+
+        def call(_agent, system, prompt, **_kwargs):
+            self.assertIn("Preserve explicitly requested files as final deliverables", system)
+            self.assertIn("do not downgrade them to Markdown/CSV intermediates", system)
+            self.assertIn("suitable local tools, dependencies and permissions", system)
+            self.assertIn("legacy direct API mode only supports text/CSV file tools", system)
+            self.assertIn("Do not assume external integrations, deployment access", system)
+            self.assertNotIn("cannot directly create PDF", system)
+            source = json.loads(prompt.split("\n", 1)[1])["document"]
+            self.assertEqual(source["text"], document["text"])
+            return {"content": json.dumps(analysis, ensure_ascii=False)}
+
+        result = self.analyze(call, document)
+        self.assertEqual(result, analysis)
+        self.assertEqual(result["deliverables"], ["report.pdf", "report.html", "8 张 PNG 图表"])
 
     def test_missing_key_never_calls_model(self):
         with patch.dict(os.environ, {}, clear=True), self.assertRaises(PlanningError) as raised:

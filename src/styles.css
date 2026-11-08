@@ -2607,6 +2607,11 @@ kbd {
   flex-shrink: 0;
   margin-top: 2px;
 }
+.requirement-error > span,
+.toast > span {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .requirement-task {
   background: #f7f8fb;
   border: 1px solid var(--border);

@@ -433,6 +433,30 @@ export function localIssues(w: Workflow): Issue[] {
   });
   return issues;
 }
+function apiErrorMessage(payload: unknown, status: number): string {
+  const fallback = `Server error (${status})`;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return fallback;
+  const error = payload as Record<string, unknown>;
+  const message = [error.error, error.message].find(
+    (value): value is string => typeof value === 'string' && Boolean(value.trim()),
+  ) || fallback;
+  const details: string[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(error.issues)) {
+    for (const value of error.issues) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const issue = value as Record<string, unknown>;
+      if (typeof issue.message !== 'string' || !issue.message.trim()) continue;
+      const node = typeof issue.node_id === 'string' ? issue.node_id : '';
+      const code = typeof issue.code === 'string' ? issue.code : '';
+      const key = JSON.stringify([code, node, issue.message]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      details.push(`- ${node ? `[${node}] ` : ''}${issue.message}`);
+    }
+  }
+  return [message, ...details].join('\n');
+}
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(
     `/api/${path}`,
@@ -447,9 +471,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   if (!res.ok) {
     let message = `Server error (${res.status})`;
     try {
-      const x = await res.json();
-      message = x.error || x.message || message;
-      if (x.issues) message += ' ' + x.issues.map((i: Issue) => i.message).join(' ');
+      message = apiErrorMessage(await res.json(), res.status);
     } catch {}
     throw Error(message);
   }
