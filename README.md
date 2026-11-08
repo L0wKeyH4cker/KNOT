@@ -4,6 +4,8 @@
 
 **Your idea. A team in motion.**
 
+[**Open KNOT online → knot-lovat.vercel.app**](https://knot-lovat.vercel.app/)
+
 KNOT turns a project idea or requirements document into an editable AI workflow. Arrange tasks on a canvas, assign human owners and AI roles, add review gates, and export a workspace that runs with Codex or Claude on your own computer.
 
 Choose one local assistant for the whole workflow. Each task gets its own context and working copy; independent tasks run in parallel, and dependent tasks receive the results connected to them. One model can serve several distinct roles.
@@ -14,6 +16,31 @@ Choose one local assistant for the whole workflow. Each task gets its own contex
 - **Human ownership and review:** track who owns each task and require a person's approval before final delivery.
 - **Usage and cost sharing:** import execution usage, confirm actual costs, and split them among project members.
 - **Project library:** automatic browser drafts and optional Supabase cloud saves.
+
+## Use KNOT online
+
+Visit [https://knot-lovat.vercel.app/](https://knot-lovat.vercel.app/) to start in your browser. You can design, save, and export workflows without cloning this repository or installing Node.js, Python, or a local backend. Python and a coding CLI are needed later to execute the downloaded workspace.
+
+### From idea to running workflow
+
+1. **Explore the app.** On your first visit, click **Explore an example** for a guided tour. You can revisit it through **A quick guide → Take a guided tour**.
+2. **Start a project.** Describe your idea and click **Continue**. Enter the project name, goal, and final deliverable, then click **Create project**. To start from a document instead, click **Add requirements** and upload a text PDF, TXT, or Markdown file.
+3. **Build or generate your plan.** Choose **Start from scratch** to build the canvas yourself, or **Generate with AI** to open the designer. For a document, review the extracted text, click **Analyze requirements**, edit the proposed tasks and owners, then click **Generate workflow from requirements**.
+4. **Review the assignments and handoffs.** Select each task to check its **Agent**, **Human owner**, **Task instructions**, and **Acceptance criteria**. Set the **Reviewer** on Human Review nodes. Control connections set execution order; data connections pass upstream results and project files.
+5. **Check and save.** Click **Check** and resolve any errors, then click **Save**. Use **Export JSON** to keep a portable backup. Reopen projects through **My projects** on the home page or **Saved projects** in the sidebar.
+6. **Download the workspace.** Click **Export runner**, select **Codex** or **Claude** under **Run with**, and click **Download agent workspace**. Leave **Shared model (optional)** blank to use your local CLI's default model.
+7. **Run it on your computer.** Extract the ZIP into a new folder, install Python 3.10+ and authenticate the selected CLI, then follow the [local execution instructions](#export-and-run-local-agents). Keep the run terminal open and approve or reject when the workflow reaches a human review.
+8. **Collect results and review costs.** Delivered project files appear in `results/project/`, with configured reports in `results/`. Return to the same online project, open **Costs & split**, and use **Import usage report** to load `logs/usage-report.json`.
+
+The website handles workflow design, requirements analysis, validation, and export. Downloading a workspace does not start its Agents; the run command starts them on your computer. You do not need to install the editor locally to run a downloaded workspace.
+
+### Planning, uploads, and saved projects
+
+The online site supplies a default DeepSeek planning connection. Start with the supplied **Planning provider** and **Planning model** settings; its API credentials are managed on the server, so you do not need to enter a personal key to use that connection. Existing custom planner settings may still be saved in your browser. If generation reports a connection error, check those settings; you can also continue with **Start from scratch** or the example template. The planner connection is separate from the Codex/Claude authentication used to execute tasks locally.
+
+Uploaded requirements are sent to the hosted backend for text extraction. Clicking **Analyze requirements** or generating a workflow sends the extracted text and relevant project materials to the configured planning model. See [Generate from requirements](#generate-from-requirements) for supported files and limits.
+
+Drafts are saved in the current browser. Clicking **Save** also attempts a cloud save when cloud integration is configured; check the save message to see whether it succeeded. Keep workflow backups with **Export JSON**, and use **Import JSON** to move a project to another browser or a local editor. Online and local installations have separate browser storage. Export the cost ledger separately if you need to move it too; it is not part of workflow JSON or cloud saves.
 
 ## Run the editor locally
 
@@ -223,7 +250,7 @@ For a **local editor installation**, enter a key in the connection settings and 
 
 Workflow files store only environment variable references such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`. Never put actual keys in nodes, prompts, or workflow JSON. Downloaded workspaces use their own environment; configure any required API keys on the execution machine.
 
-Use the provider's API model ID, not a display name. The DeepSeek preset currently fills in `deepseek-flash`, `https://api.deepseek.com`, and `DEEPSEEK_API_KEY`; change these to match your account when needed. **Test connection** sends a short generic model request without project materials. **Credential detected** means a key is configured, not that a generation request has succeeded.
+Use the provider's API model ID, not a display name. The DeepSeek preset currently fills in `deepseek-flash`, `https://api.deepseek.com`, and `DEEPSEEK_API_KEY`; change these to match your account when needed. **Test connection** sends a short generic model request without project materials. The connection status only reports whether the backend has a configured key; it does not prove that a generation request has succeeded.
 
 ### Advanced: different APIs for different tasks
 
