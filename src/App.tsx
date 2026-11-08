@@ -42,7 +42,9 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 import Home from './Home';
-import BrandLogo from './BrandLogo';
+import NavigationButton from './NavigationButton';
+import LongWaitNotice from './LongWaitNotice';
+import { HomeLogo } from './BrandLogo';
 import { TOUR_STEPS, readOnboardingStatus, rememberOnboarding } from './onboarding';
 import type { OnboardingStatus } from './onboarding';
 import { usePage } from './navigation';
@@ -200,6 +202,15 @@ export default function App() {
   const [plannerReady, setPlannerReady] = useState(() => !!readPlanner());
   const plannerInitialized = useRef(plannerReady);
   const [draft, setDraft] = useState({ name: '', members: 3, goal: '', deliverable: '' });
+  const [setupErrors, setSetupErrors] = useState<Partial<Record<keyof typeof draft, string>>>({});
+  const updateDraft = (patch: Partial<typeof draft>) => {
+    setDraft((value) => ({ ...value, ...patch }));
+    setSetupErrors((errors) => {
+      const next = { ...errors };
+      for (const key of Object.keys(patch) as (keyof typeof draft)[]) delete next[key];
+      return next;
+    });
+  };
   const [intakeProject, setIntakeProject] = useState<Workflow | null>(null);
   const [firstVisit, setFirstVisit] = useState(() => readOnboardingStatus() === null);
   const [tourStep, setTourStep] = useState<number | null>(null);
@@ -917,6 +928,7 @@ export default function App() {
     if (firstVisit) dismissWelcome();
     if (hasProject(wf)) save();
     setDraft({ name: '', members: 3, goal: idea, deliverable: '' });
+    setSetupErrors({});
     setWizard(1);
   };
   const startRequirements = (idea: string) => {
@@ -947,13 +959,13 @@ export default function App() {
     hidden: e.kind === 'data' && !showData,
     label: e.source_port === 'true' ? 'True' : e.source_port === 'false' ? 'False' : undefined,
     style: {
-      stroke: e.kind === 'data' ? '#99aabf' : '#80917d',
+      stroke: e.kind === 'data' ? '#99aabf' : '#7183b4',
       strokeWidth: e.id === edgeSelected ? 3 : 1.7,
       strokeDasharray: e.kind === 'data' ? '5 5' : undefined,
     },
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: e.kind === 'data' ? '#99aabf' : '#80917d',
+      color: e.kind === 'data' ? '#99aabf' : '#7183b4',
       width: 14,
       height: 14,
     },
@@ -980,369 +992,595 @@ export default function App() {
         />
       )}
       {page !== 'home' && page !== 'new' && (
-        <div className="editor-layout" inert={!!modal || tourStep !== null}>
+        <div
+          className="editor-layout"
+          inert={tourStep !== null}
+          aria-hidden={tourStep !== null || undefined}
+        >
+          <header className="app-header">
+            <HomeLogo onHome={() => navigate('home')} />
+            <div className="header-right">
+              <span className={`backend-status ${online ? 'online' : ''}`}>
+                <i />
+                {online ? 'Local runner ready' : 'Backend offline'}
+              </span>
+              <span className="header-divider" />
+              <button className="text-button" onClick={() => setModal('help')}>
+                Quick guide
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          </header>
           <nav className="rail" aria-label="Main navigation">
-            <button
-              className="brand-mark"
-              title="KNOT home"
-              aria-label="KNOT home"
-              onClick={() => navigate('home')}
-            >
-              <BrandLogo mark decorative />
-            </button>
             <div className="rail-middle">
-              <button
-                className="rail-button active"
-                title="Workflow canvas"
+              <NavigationButton
+                label="Workflow canvas"
+                description="Build and connect workflow blocks."
+                active={!modal || ['planner', 'check', 'exported'].includes(modal)}
                 onClick={() => navigate('canvas')}
               >
                 <LayoutGrid size={21} />
-              </button>
-              <button className="rail-button" title="Agents" onClick={() => setModal('agents')}>
+              </NavigationButton>
+              <NavigationButton
+                label="Agents"
+                description="Configure your AI team and model connections."
+                active={modal === 'agents'}
+                onClick={() => setModal('agents')}
+              >
                 <Bot size={21} />
-              </button>
-              <button
-                className="rail-button"
-                title="Project settings"
+              </NavigationButton>
+              <NavigationButton
+                label="Project settings"
+                description="Manage the project, people and resources."
+                active={modal === 'project'}
                 onClick={() => setModal('project')}
               >
                 <Settings2 size={21} />
-              </button>
-              <button className="rail-button" title="Saved projects" onClick={openLibrary}>
+              </NavigationButton>
+              <NavigationButton
+                label="Saved projects"
+                description="Browse and open your saved projects."
+                active={modal === 'saved'}
+                onClick={openLibrary}
+              >
                 <FolderOpen size={21} />
-              </button>
+              </NavigationButton>
             </div>
-            <button
-              className="rail-button"
-              title="Help & shortcuts"
+            <NavigationButton
+              label="Help & shortcuts"
+              description="Explore the guide and keyboard shortcuts."
+              active={modal === 'help'}
               onClick={() => setModal('help')}
             >
               <HelpCircle size={21} />
-            </button>
+            </NavigationButton>
             <span className="profile-avatar">Y</span>
           </nav>
           <div className="workspace">
-            <header className="app-header">
-              <div className="brand-word">
-                <button className="workspace-home" onClick={() => navigate('home')}>
-                  <ArrowLeft size={15} /> Home
-                </button>
-                <BrandLogo />
-              </div>
-              <div className="header-right">
-                <span className={`backend-status ${online ? 'online' : ''}`}>
-                  <i />
-                  {online ? 'Local runner ready' : 'Backend offline'}
-                </span>
-                <span className="header-divider" />
-                <button className="text-button" onClick={() => setModal('help')}>
-                  Quick guide
-                  <ArrowUpRight size={14} />
-                </button>
-              </div>
-            </header>
-            <section className="project-bar">
-              <div>
-                <div className="project-name">
-                  <h1>{wf.project.name}</h1>
-                  <button
-                    className="icon-button"
-                    title="Edit project"
+            <div
+              className={`canvas-workspace ${modal ? 'is-inactive' : ''}`}
+              inert={!!modal}
+              aria-hidden={!!modal || undefined}
+            >
+              <section className="project-bar">
+                <div>
+                  <div className="project-name">
+                    <h1>{wf.project.name}</h1>
+                    <button
+                      className="icon-button"
+                      title="Edit project"
+                      onClick={() => setModal('project')}
+                    >
+                      <ChevronDown size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="project-actions">
+                  <div
+                    className="avatar-stack"
                     onClick={() => setModal('project')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && setModal('project')}
+                    aria-label="Edit team"
                   >
-                    <ChevronDown size={18} />
-                  </button>
-                </div>
-              </div>
-              <div className="project-actions">
-                <div
-                  className="avatar-stack"
-                  onClick={() => setModal('project')}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setModal('project')}
-                  aria-label="Edit team"
-                >
-                  {wf.project.members.slice(0, 4).map((m, i) => (
-                    <span key={m.id} title={m.name} className={`avatar avatar-${i % 4}`}>
-                      {m.name
-                        .split(' ')
-                        .map((x) => x[0])
-                        .slice(0, 2)
-                        .join('')}
-                    </span>
-                  ))}
-                  <span className="team-count">{wf.project.members.length} members</span>
-                </div>
-                <button className="secondary" onClick={save}>
-                  <Save size={15} />
-                  Save
-                </button>
-                <button
-                  className="primary"
-                  data-tour="export-runner"
-                  disabled={!!busy}
-                  onClick={exportZip}
-                >
-                  {busy === 'export' ? (
-                    <LoaderCircle className="spin" size={16} />
-                  ) : (
-                    <Download size={16} />
-                  )}
-                  Export runner
-                  <ChevronDown size={14} />
-                </button>
-              </div>
-            </section>
-            <div className="studio">
-              <aside className="library" data-tour="block-library">
-                <div className="panel-head">
-                  <span>Building blocks</span>
-                  <span className="count-badge">7</span>
-                </div>
-                <div className="library-body">
-                  <input
-                    className="block-search"
-                    aria-label="Find a block"
-                    placeholder="Find a block…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                  <div className="palette">
-                    {(Object.keys(KINDS) as NodeKind[])
-                      .filter((k) => KINDS[k].name.toLowerCase().includes(search.toLowerCase()))
-                      .map((k) => {
-                        const meta = KINDS[k],
-                          Icon = icons[k];
-                        return (
-                          <button
-                            className="palette-item"
-                            aria-label={meta.name}
-                            title={meta.description}
-                            key={k}
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData('application/knot', k);
-                              e.dataTransfer.effectAllowed = 'move';
-                            }}
-                            onClick={() => add(k)}
-                            data-testid={`palette-${k}`}
-                          >
-                            <span
-                              className="palette-icon"
-                              style={{ color: meta.color, background: `${meta.color}14` }}
-                            >
-                              <Icon size={19} />
-                            </span>
-                            <span>
-                              <strong>{meta.name}</strong>
-                            </span>
-                            <GripVertical size={15} className="grip" />
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-                <div className="library-footer">
-                  <button onClick={() => fileInput.current?.click()}>
-                    <Upload size={14} />
-                    Import JSON
-                  </button>
-                  <button onClick={jsonExport}>
-                    <FileJson size={14} />
-                    Export JSON
-                  </button>
-                </div>
-              </aside>
-              <main className="canvas-section">
-                <div className="canvas-toolbar">
-                  <div className="canvas-tabs">
-                    <button className="active">
-                      <MousePointer2 size={15} />
-                      Canvas
-                    </button>
-                    <button onClick={() => setModal('agents')}>
-                      <Bot size={15} />
-                      Agents<span>{wf.agents.length}</span>
-                    </button>
-                  </div>
-                  <div className="canvas-tools">
-                    <button
-                      className="icon-button"
-                      disabled={!past.current.length}
-                      onClick={undo}
-                      title="Undo (Ctrl+Z)"
-                    >
-                      <Undo2 size={16} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      disabled={!future.current.length}
-                      onClick={redo}
-                      title="Redo (Ctrl+Shift+Z)"
-                    >
-                      <Redo2 size={16} />
-                    </button>
-                    <span className="toolbar-divider" />
-                    <button className="toolbar-button" onClick={() => setModal('planner')}>
-                      <Sparkles size={15} />
-                      AI designer
-                    </button>
-                    <button className="toolbar-button check-button" onClick={check}>
-                      <CheckCircle2 size={15} />
-                      Check
-                    </button>
-                  </div>
-                </div>
-                <div
-                  className="flow-wrap"
-                  data-testid="workflow-canvas"
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const kind = e.dataTransfer.getData('application/knot') as NodeKind;
-                    if (KINDS[kind])
-                      add(kind, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
-                  }}
-                >
-                  <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    nodeTypes={nodeTypes}
-                    onNodesChange={onNodesChange}
-                    onNodeDragStart={remember}
-                    onNodeClick={(_, n) => {
-                      setSelected(n.id);
-                      setEdgeSelected(null);
-                    }}
-                    onPaneClick={() => {
-                      setSelected(null);
-                      setEdgeSelected(null);
-                    }}
-                    onEdgeClick={(_, e) => {
-                      setEdgeSelected(e.id);
-                      setSelected(null);
-                    }}
-                    onConnect={connect}
-                    onReconnect={(old, next) => connect(next, old.id)}
-                    onMoveEnd={(_, viewport) => {
-                      if (!tourSnapshot.current) setWf((w) => ({ ...w, viewport }));
-                    }}
-                    defaultViewport={wf.viewport}
-                    snapToGrid
-                    snapGrid={[16, 16]}
-                    minZoom={0.2}
-                    maxZoom={1.75}
-                    deleteKeyCode={null}
-                    connectionRadius={28}
-                    proOptions={{ hideAttribution: false }}
-                  >
-                    <Background
-                      variant={BackgroundVariant.Dots}
-                      color="#c4cbbd"
-                      gap={22}
-                      size={1}
-                    />
-                    <Controls showInteractive={false}>
-                      <ControlButton
-                        className="canvas-read-size"
-                        title="Read at 100%"
-                        aria-label="Read at 100%"
-                        onClick={() => void flow.zoomTo(1, { duration: 250 })}
-                      >
-                        100%
-                      </ControlButton>
-                    </Controls>
-                    <MiniMap
-                      nodeColor={(n) => KINDS[(n.data.block as Block).type].color}
-                      maskColor="#f4f6f0bb"
-                      pannable
-                      zoomable
-                    />
-                  </ReactFlow>
-                  {!wf.nodes.length && (
-                    <div className="canvas-empty">
-                      <div className="empty-blocks">
-                        <span>
-                          <Blocks size={32} />
-                        </span>
-                        <span>
-                          <Plus size={24} />
-                        </span>
-                      </div>
-                      <h2>Make room for your next big idea.</h2>
-                      <p>
-                        Drag your first block here, or get a head start
-                        <br />
-                        with an example workflow.
-                      </p>
-                      <button className="secondary" onClick={() => add('start')}>
-                        <Plus size={16} />
-                        Add a Start block
-                      </button>
-                      <button className="text-button" onClick={loadTemplate}>
-                        Explore the example
-                        <ArrowRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                  {edgeSelected && (
-                    <div className="edge-popover">
-                      <Cable size={16} />
-                      <span>
-                        {wf.edges.find((e) => e.id === edgeSelected)?.kind === 'data'
-                          ? 'Data access'
-                          : 'Execution dependency'}
+                    {wf.project.members.slice(0, 4).map((m, i) => (
+                      <span key={m.id} title={m.name} className={`avatar avatar-${i % 4}`}>
+                        {m.name
+                          .split(' ')
+                          .map((x) => x[0])
+                          .slice(0, 2)
+                          .join('')}
                       </span>
+                    ))}
+                    <span className="team-count">{wf.project.members.length} members</span>
+                  </div>
+                  <button className="secondary" onClick={save}>
+                    <Save size={15} />
+                    Save
+                  </button>
+                  <button
+                    className="primary"
+                    data-tour="export-runner"
+                    disabled={!!busy}
+                    onClick={exportZip}
+                  >
+                    {busy === 'export' ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : (
+                      <Download size={16} />
+                    )}
+                    Export runner
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
+              </section>
+              <div className="studio">
+                <aside className="library" data-tour="block-library">
+                  <div className="panel-head">
+                    <span>Building blocks</span>
+                    <span className="count-badge">7</span>
+                  </div>
+                  <div className="library-body">
+                    <input
+                      className="block-search"
+                      aria-label="Find a block"
+                      placeholder="Find a block…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                    <div className="palette">
+                      {(Object.keys(KINDS) as NodeKind[])
+                        .filter((k) => KINDS[k].name.toLowerCase().includes(search.toLowerCase()))
+                        .map((k) => {
+                          const meta = KINDS[k],
+                            Icon = icons[k];
+                          return (
+                            <button
+                              className="palette-item"
+                              aria-label={meta.name}
+                              title={meta.description}
+                              key={k}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('application/knot', k);
+                                e.dataTransfer.effectAllowed = 'move';
+                              }}
+                              onClick={() => add(k)}
+                              data-testid={`palette-${k}`}
+                            >
+                              <span
+                                className="palette-icon"
+                                style={{ color: meta.color, background: `${meta.color}14` }}
+                              >
+                                <Icon size={19} />
+                              </span>
+                              <span>
+                                <strong>{meta.name}</strong>
+                              </span>
+                              <GripVertical size={15} className="grip" />
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                  <div className="library-footer">
+                    <button onClick={() => fileInput.current?.click()}>
+                      <Upload size={14} />
+                      Import JSON
+                    </button>
+                    <button onClick={jsonExport}>
+                      <FileJson size={14} />
+                      Export JSON
+                    </button>
+                  </div>
+                </aside>
+                <main className="canvas-section">
+                  <div className="canvas-toolbar">
+                    <div className="canvas-tabs">
+                      <button className="active">
+                        <MousePointer2 size={15} />
+                        Canvas
+                      </button>
+                      <button onClick={() => setModal('agents')}>
+                        <Bot size={15} />
+                        Agents<span>{wf.agents.length}</span>
+                      </button>
+                    </div>
+                    <div className="canvas-tools">
                       <button
-                        className="icon-button danger"
-                        title="Delete connection"
-                        onClick={remove}
+                        className="icon-button"
+                        disabled={!past.current.length}
+                        onClick={undo}
+                        title="Undo (Ctrl+Z)"
                       >
-                        <Trash2 size={16} />
+                        <Undo2 size={16} />
+                      </button>
+                      <button
+                        className="icon-button"
+                        disabled={!future.current.length}
+                        onClick={redo}
+                        title="Redo (Ctrl+Shift+Z)"
+                      >
+                        <Redo2 size={16} />
+                      </button>
+                      <span className="toolbar-divider" />
+                      <button className="toolbar-button" onClick={() => setModal('planner')}>
+                        <Sparkles size={15} />
+                        AI designer
+                      </button>
+                      <button className="toolbar-button check-button" onClick={check}>
+                        <CheckCircle2 size={15} />
+                        Check
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    className="flow-wrap"
+                    data-testid="workflow-canvas"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const kind = e.dataTransfer.getData('application/knot') as NodeKind;
+                      if (KINDS[kind])
+                        add(kind, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+                    }}
+                  >
+                    <ReactFlow
+                      nodes={nodes}
+                      edges={edges}
+                      nodeTypes={nodeTypes}
+                      onNodesChange={onNodesChange}
+                      onNodeDragStart={remember}
+                      onNodeClick={(_, n) => {
+                        setSelected(n.id);
+                        setEdgeSelected(null);
+                      }}
+                      onPaneClick={() => {
+                        setSelected(null);
+                        setEdgeSelected(null);
+                      }}
+                      onEdgeClick={(_, e) => {
+                        setEdgeSelected(e.id);
+                        setSelected(null);
+                      }}
+                      onConnect={connect}
+                      onReconnect={(old, next) => connect(next, old.id)}
+                      onMoveEnd={(_, viewport) => {
+                        if (!tourSnapshot.current) setWf((w) => ({ ...w, viewport }));
+                      }}
+                      defaultViewport={wf.viewport}
+                      snapToGrid
+                      snapGrid={[16, 16]}
+                      minZoom={0.2}
+                      maxZoom={1.75}
+                      deleteKeyCode={null}
+                      connectionRadius={28}
+                      proOptions={{ hideAttribution: false }}
+                    >
+                      <Background
+                        variant={BackgroundVariant.Dots}
+                        color="#bdc0cb"
+                        gap={22}
+                        size={1}
+                      />
+                      <Controls showInteractive={false}>
+                        <ControlButton
+                          className="canvas-read-size"
+                          title="Read at 100%"
+                          aria-label="Read at 100%"
+                          onClick={() => void flow.zoomTo(1, { duration: 250 })}
+                        >
+                          100%
+                        </ControlButton>
+                      </Controls>
+                      <MiniMap
+                        nodeColor={(n) => KINDS[(n.data.block as Block).type].color}
+                        maskColor="#f0f1f6bb"
+                        pannable
+                        zoomable
+                      />
+                    </ReactFlow>
+                    {!wf.nodes.length && (
+                      <div className="canvas-empty">
+                        <div className="empty-blocks">
+                          <span>
+                            <Blocks size={32} />
+                          </span>
+                          <span>
+                            <Plus size={24} />
+                          </span>
+                        </div>
+                        <h2>Make room for your next big idea.</h2>
+                        <p>
+                          Drag your first block here, or get a head start
+                          <br />
+                          with an example workflow.
+                        </p>
+                        <button className="secondary" onClick={() => add('start')}>
+                          <Plus size={16} />
+                          Add a Start block
+                        </button>
+                        <button className="text-button" onClick={loadTemplate}>
+                          Explore the example
+                          <ArrowRight size={14} />
+                        </button>
+                      </div>
+                    )}
+                    {edgeSelected && (
+                      <div className="edge-popover">
+                        <Cable size={16} />
+                        <span>
+                          {wf.edges.find((e) => e.id === edgeSelected)?.kind === 'data'
+                            ? 'Data access'
+                            : 'Execution dependency'}
+                        </span>
+                        <button
+                          className="icon-button danger"
+                          title="Delete connection"
+                          onClick={remove}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="canvas-status">
+                    <span>
+                      <Check size={13} />
+                      {savedStatus}
+                    </span>
+                    <div>
+                      <span>{wf.nodes.length} blocks</span>
+                      <span>{wf.edges.length} connections</span>
+                      <button
+                        className={showData ? 'data-toggle active' : 'data-toggle'}
+                        onClick={() => setShowData(!showData)}
+                      >
+                        <i />
+                        Data links
+                      </button>
+                      <span className="execution-legend">
+                        <i />
+                        Execution
+                      </span>
+                    </div>
+                  </div>
+                </main>
+                {node && (
+                  <Inspector
+                    node={node}
+                    wf={wf}
+                    onChange={(next) =>
+                      change({ ...wf, nodes: wf.nodes.map((n) => (n.id === next.id ? next : n)) })
+                    }
+                    onClose={() => setSelected(null)}
+                    onDuplicate={duplicate}
+                    onDelete={remove}
+                    onAgents={() => setModal('agents')}
+                  />
+                )}
+              </div>
+            </div>
+            {modal && (
+              <section
+                className={`workspace-panel panel-${modal}`}
+                role="region"
+                aria-label={modal}
+              >
+                <div className="page-title-bar panel-heading">
+                  <h2>
+                    {
+                      {
+                        agents: 'Meet your agents',
+                        project: 'Project settings',
+                        planner: 'AI workflow designer',
+                        check: 'Workflow check',
+                        saved: 'Your project library',
+                        help: 'A guide to your canvas',
+                        exported: 'Your workflow, ready to go.',
+                      }[modal]
+                    }
+                  </h2>
+                  <button
+                    className="secondary page-back"
+                    title="Return to the previous view"
+                    disabled={busy === 'plan'}
+                    onClick={() => {
+                      setModal(null);
+                      setIntakeProject(null);
+                    }}
+                  >
+                    <ArrowLeft size={16} /> Back
+                  </button>
+                </div>
+                <div className="modal-body">
+                  {modal === 'agents' && (
+                    <AgentsSettings
+                      wf={wf}
+                      change={change}
+                      credentials={credentials}
+                      onCredentialsChange={setCredentials}
+                    />
+                  )}
+                  {modal === 'project' && <ProjectSettings wf={wf} change={change} />}
+                  {modal === 'planner' && (
+                    <RequirementIntake
+                      wf={intakeProject || wf}
+                      planner={planner}
+                      setPlanner={(p) => {
+                        try {
+                          if (p.credential_ref && !/^[A-Z_][A-Z0-9_]*$/.test(p.credential_ref))
+                            throw Error(
+                              'Use an uppercase environment variable name, never an API key.',
+                            );
+                          assertSafeWorkflow(p);
+                          plannerInitialized.current = true;
+                          setPlannerReady(true);
+                          setPlanner(p);
+                        } catch (e) {
+                          notify((e as Error).message);
+                        }
+                      }}
+                      credentials={credentials}
+                      onCredentialsChange={setCredentials}
+                      busy={busy === 'plan'}
+                      generate={generate}
+                    />
+                  )}
+                  {modal === 'check' && (
+                    <div className="check-content">
+                      {busy === 'check' ? (
+                        <div className="loading">
+                          <LoaderCircle className="spin" />
+                          Checking connections, configuration, and permissions…
+                        </div>
+                      ) : (
+                        <>
+                          <div
+                            className={`check-summary ${issues.some((i) => i.severity === 'error') ? 'has-errors' : ''}`}
+                          >
+                            <CheckCircle2 size={28} />
+                            <div>
+                              <h3>
+                                {issues.some((i) => i.severity === 'error')
+                                  ? 'A few things need your attention.'
+                                  : 'Ready for a mock run.'}
+                              </h3>
+                              <p>
+                                {issues.filter((i) => i.severity === 'error').length} errors ·{' '}
+                                {issues.filter((i) => i.severity === 'warning').length}{' '}
+                                configuration notes
+                              </p>
+                            </div>
+                          </div>
+                          <p className="muted small">
+                            This checks the current canvas for export. Real runs also require valid
+                            model names, credentials, and all input files.
+                          </p>
+                          <div className="issue-list">
+                            {issues.map((i, j) => (
+                              <button
+                                key={j}
+                                className={`issue ${i.severity}`}
+                                onClick={() => {
+                                  if (i.node_id) {
+                                    setSelected(i.node_id);
+                                    setModal(null);
+                                    flow.fitView({
+                                      nodes: [{ id: i.node_id }],
+                                      maxZoom: 1,
+                                      duration: 300,
+                                    });
+                                  }
+                                }}
+                              >
+                                <CircleAlert size={17} />
+                                <span>
+                                  <strong>
+                                    {i.severity === 'error' ? 'Fix required' : 'Configuration note'}
+                                  </strong>
+                                  {i.message}
+                                </span>
+                                {i.node_id && <ChevronRight size={16} />}
+                              </button>
+                            ))}
+                          </div>
+                          {wf.design_notes.length > 0 && (
+                            <div className="design-notes">
+                              <h4>Why this workflow?</h4>
+                              {wf.design_notes.map((n, i) => (
+                                <p key={i}>{n}</p>
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            className="primary full"
+                            disabled={issues.some((i) => i.severity === 'error') || !!busy}
+                            onClick={exportZip}
+                          >
+                            <Download size={16} />
+                            Export runnable ZIP
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {modal === 'saved' && (
+                    <Suspense fallback={<p className="muted">Loading your projects…</p>}>
+                      <ProjectLibrary
+                        projects={projects}
+                        onCreate={() => startProject('')}
+                        onImport={() => fileInput.current?.click()}
+                        onPrepareOpen={prepareProjectTab}
+                        onDelete={deleteProject}
+                      />
+                    </Suspense>
+                  )}
+                  {modal === 'help' && (
+                    <Suspense fallback={<p className="muted">Loading the visual guide…</p>}>
+                      <QuickGuide
+                        busy={!!busy}
+                        onTour={startGuidedExample}
+                        onHome={() => {
+                          setFocusHomeComposer(true);
+                          navigate('home');
+                        }}
+                      />
+                    </Suspense>
+                  )}
+                  {modal === 'exported' && (
+                    <div className="exported-content">
+                      <div className="export-icon">
+                        <Download size={30} />
+                      </div>
+                      <h3>Take your team’s workflow with you.</h3>
+                      <p>
+                        Your ZIP contains the fixed Python runner, current workflow, prompts,
+                        example inputs, and setup instructions.
+                      </p>
+                      <ol className="export-steps">
+                        <li>
+                          <span>1</span>
+                          <div>
+                            <strong>Extract to a new folder</strong>
+                            <p>Python 3.10 or newer is required.</p>
+                          </div>
+                        </li>
+                        <li>
+                          <span>2</span>
+                          <div>
+                            <strong>Try the mock run</strong>
+                            <p>Open start.bat on Windows, or run bash start.sh on macOS/Linux.</p>
+                          </div>
+                        </li>
+                        <li>
+                          <span>3</span>
+                          <div>
+                            <strong>Review, then approve</strong>
+                            <p>
+                              The runner prints the exact command to continue. Final delivery waits
+                              for your approval.
+                            </p>
+                          </div>
+                        </li>
+                      </ol>
+                      <div className="note">
+                        For real execution, configure model names and credentials locally, then run
+                        with --mode real. See the bundled README.
+                      </div>
+                      <button className="primary full" onClick={() => setModal(null)}>
+                        Back to canvas
+                        <ArrowRight size={16} />
                       </button>
                     </div>
                   )}
                 </div>
-                <div className="canvas-status">
-                  <span>
-                    <Check size={13} />
-                    {savedStatus}
-                  </span>
-                  <div>
-                    <span>{wf.nodes.length} blocks</span>
-                    <span>{wf.edges.length} connections</span>
-                    <button
-                      className={showData ? 'data-toggle active' : 'data-toggle'}
-                      onClick={() => setShowData(!showData)}
-                    >
-                      <i />
-                      Data links
-                    </button>
-                    <span className="execution-legend">
-                      <i />
-                      Execution
-                    </span>
-                  </div>
-                </div>
-              </main>
-              {node && (
-                <Inspector
-                  node={node}
-                  wf={wf}
-                  onChange={(next) =>
-                    change({ ...wf, nodes: wf.nodes.map((n) => (n.id === next.id ? next : n)) })
-                  }
-                  onClose={() => setSelected(null)}
-                  onDuplicate={duplicate}
-                  onDelete={remove}
-                  onAgents={() => setModal('agents')}
-                />
-              )}
-            </div>
+              </section>
+            )}
           </div>
         </div>
       )}
@@ -1366,17 +1604,14 @@ export default function App() {
         <div className="modal-backdrop">
           <section className="onboarding" role="dialog" aria-modal="true" aria-label="New project">
             <div className="setup-header">
-              <button className="text-button" onClick={() => navigate('home')}>
-                <ArrowLeft size={16} /> Home
-              </button>
-              <span className="home-brand">
-                <BrandLogo />
-              </span>
+              <HomeLogo onHome={() => navigate('home')} />
+            </div>
+            <div className="page-title-bar">
+              <h2>{wizard === 1 ? 'Create a project' : 'How would you like to start?'}</h2>
             </div>
             <div className="onboarding-form">
               {wizard === 1 ? (
                 <>
-                  <h2>Create a project</h2>
                   <button
                     className="start-choice ai requirement-start"
                     onClick={() => {
@@ -1405,18 +1640,35 @@ export default function App() {
                   </button>
                   <div className="onboarding-or">OR DESCRIBE YOUR PROJECT</div>
                   <form
+                    noValidate
                     onSubmit={(e) => {
                       e.preventDefault();
-                      if (!draft.name.trim()) {
-                        notify('Enter a project name.');
+                      const errors: typeof setupErrors = {};
+                      if (!draft.name.trim()) errors.name = 'Please enter a project name.';
+                      if (
+                        !Number.isInteger(draft.members) ||
+                        draft.members < 1 ||
+                        draft.members > 50
+                      )
+                        errors.members = 'Team size must be a whole number from 1 to 50.';
+                      if (!draft.deliverable.trim())
+                        errors.deliverable = 'Please enter a final deliverable.';
+                      if (!draft.goal.trim())
+                        errors.goal = 'Please describe what you are working on.';
+                      setSetupErrors(errors);
+                      const firstError = Object.keys(errors)[0];
+                      if (firstError) {
+                        e.currentTarget
+                          .querySelector<HTMLElement>(`[name="${firstError}"]`)
+                          ?.focus();
                         return;
                       }
                       const next = emptyWorkflow();
                       next.project = {
                         ...next.project,
                         name: draft.name.trim(),
-                        goal: draft.goal,
-                        deliverable: draft.deliverable,
+                        goal: draft.goal.trim(),
+                        deliverable: draft.deliverable.trim(),
                         members: Array.from({ length: draft.members }, (_, i) => ({
                           id: `member_${i + 1}`,
                           name: `Member ${i < 26 ? String.fromCharCode(65 + i) : i + 1}`,
@@ -1427,42 +1679,46 @@ export default function App() {
                       setWizard(2);
                     }}
                   >
-                    <Field label="Project name">
+                    <Field label="Project name" error={setupErrors.name}>
                       <input
+                        name="name"
                         required
                         maxLength={100}
                         placeholder="e.g. Campus mobility study"
                         value={draft.name}
-                        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                        onChange={(e) => updateDraft({ name: e.target.value })}
                       />
                     </Field>
                     <div className="form-grid">
-                      <Field label="Team size">
+                      <Field label="Team size" error={setupErrors.members}>
                         <input
+                          name="members"
                           type="number"
                           min={1}
                           max={50}
                           required
                           value={draft.members}
-                          onChange={(e) => setDraft({ ...draft, members: Number(e.target.value) })}
+                          onChange={(e) => updateDraft({ members: Number(e.target.value) })}
                         />
                       </Field>
-                      <Field label="Final deliverable">
+                      <Field label="Final deliverable" error={setupErrors.deliverable}>
                         <input
+                          name="deliverable"
                           required
                           placeholder="e.g. Research report + CSV"
                           value={draft.deliverable}
-                          onChange={(e) => setDraft({ ...draft, deliverable: e.target.value })}
+                          onChange={(e) => updateDraft({ deliverable: e.target.value })}
                         />
                       </Field>
                     </div>
-                    <Field label="What are you working on?">
+                    <Field label="What are you working on?" error={setupErrors.goal}>
                       <textarea
+                        name="goal"
                         required
                         rows={3}
                         placeholder="Describe your goal, what you need to research, and what a useful result looks like…"
                         value={draft.goal}
-                        onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
+                        onChange={(e) => updateDraft({ goal: e.target.value })}
                       />
                     </Field>
                     <button type="submit" className="primary full">
@@ -1477,7 +1733,6 @@ export default function App() {
                     <ArrowLeft size={14} />
                     Back
                   </button>
-                  <h2>How would you like to start?</h2>
                   <button
                     className="start-choice"
                     onClick={() => {
@@ -1523,235 +1778,18 @@ export default function App() {
           </section>
         </div>
       )}
-      {modal && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget && busy !== 'plan') {
-              setModal(null);
-              setIntakeProject(null);
-            }
-          }}
-        >
-          <section
-            className={`modal modal-${modal}`}
-            role="dialog"
-            aria-modal="true"
-            aria-label={modal}
-          >
-            <div className="modal-head">
-              <div>
-                <BrandLogo className="modal-brand" />
-                <h2>
-                  {
-                    {
-                      agents: 'Meet your agents',
-                      project: 'Project settings',
-                      planner: 'AI workflow designer',
-                      check: 'Workflow check',
-                      saved: 'Your project library',
-                      help: 'A guide to your canvas',
-                      exported: 'Your workflow, ready to go.',
-                    }[modal]
-                  }
-                </h2>
-              </div>
-              <button
-                className="secondary page-back"
-                title="Close dialog"
-                disabled={busy === 'plan'}
-                onClick={() => {
-                  setModal(null);
-                  setIntakeProject(null);
-                }}
-              >
-                <ArrowLeft size={16} /> Back
-              </button>
-            </div>
-            <div className="modal-body">
-              {modal === 'agents' && (
-                <AgentsSettings
-                  wf={wf}
-                  change={change}
-                  credentials={credentials}
-                  onCredentialsChange={setCredentials}
-                />
-              )}
-              {modal === 'project' && <ProjectSettings wf={wf} change={change} />}
-              {modal === 'planner' && (
-                <RequirementIntake
-                  wf={intakeProject || wf}
-                  planner={planner}
-                  setPlanner={(p) => {
-                    try {
-                      if (p.credential_ref && !/^[A-Z_][A-Z0-9_]*$/.test(p.credential_ref))
-                        throw Error(
-                          'Use an uppercase environment variable name, never an API key.',
-                        );
-                      assertSafeWorkflow(p);
-                      plannerInitialized.current = true;
-                      setPlannerReady(true);
-                      setPlanner(p);
-                    } catch (e) {
-                      notify((e as Error).message);
-                    }
-                  }}
-                  credentials={credentials}
-                  onCredentialsChange={setCredentials}
-                  busy={busy === 'plan'}
-                  generate={generate}
-                />
-              )}
-              {modal === 'check' && (
-                <div className="check-content">
-                  {busy === 'check' ? (
-                    <div className="loading">
-                      <LoaderCircle className="spin" />
-                      Checking connections, configuration, and permissions…
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        className={`check-summary ${issues.some((i) => i.severity === 'error') ? 'has-errors' : ''}`}
-                      >
-                        <CheckCircle2 size={28} />
-                        <div>
-                          <h3>
-                            {issues.some((i) => i.severity === 'error')
-                              ? 'A few things need your attention.'
-                              : 'Ready for a mock run.'}
-                          </h3>
-                          <p>
-                            {issues.filter((i) => i.severity === 'error').length} errors ·{' '}
-                            {issues.filter((i) => i.severity === 'warning').length} configuration
-                            notes
-                          </p>
-                        </div>
-                      </div>
-                      <p className="muted small">
-                        This checks the current canvas for export. Real runs also require valid
-                        model names, credentials, and all input files.
-                      </p>
-                      <div className="issue-list">
-                        {issues.map((i, j) => (
-                          <button
-                            key={j}
-                            className={`issue ${i.severity}`}
-                            onClick={() => {
-                              if (i.node_id) {
-                                setSelected(i.node_id);
-                                setModal(null);
-                                flow.fitView({
-                                  nodes: [{ id: i.node_id }],
-                                  maxZoom: 1,
-                                  duration: 300,
-                                });
-                              }
-                            }}
-                          >
-                            <CircleAlert size={17} />
-                            <span>
-                              <strong>
-                                {i.severity === 'error' ? 'Fix required' : 'Configuration note'}
-                              </strong>
-                              {i.message}
-                            </span>
-                            {i.node_id && <ChevronRight size={16} />}
-                          </button>
-                        ))}
-                      </div>
-                      {wf.design_notes.length > 0 && (
-                        <div className="design-notes">
-                          <h4>Why this workflow?</h4>
-                          {wf.design_notes.map((n, i) => (
-                            <p key={i}>{n}</p>
-                          ))}
-                        </div>
-                      )}
-                      <button
-                        className="primary full"
-                        disabled={issues.some((i) => i.severity === 'error') || !!busy}
-                        onClick={exportZip}
-                      >
-                        <Download size={16} />
-                        Export runnable ZIP
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-              {modal === 'saved' && (
-                <Suspense fallback={<p className="muted">Loading your projects…</p>}>
-                  <ProjectLibrary
-                    projects={projects}
-                    onCreate={() => startProject('')}
-                    onImport={() => fileInput.current?.click()}
-                    onPrepareOpen={prepareProjectTab}
-                    onDelete={deleteProject}
-                  />
-                </Suspense>
-              )}
-              {modal === 'help' && (
-                <Suspense fallback={<p className="muted">Loading the visual guide…</p>}>
-                  <QuickGuide
-                    busy={!!busy}
-                    onTour={startGuidedExample}
-                    onHome={() => {
-                      setFocusHomeComposer(true);
-                      navigate('home');
-                    }}
-                  />
-                </Suspense>
-              )}
-              {modal === 'exported' && (
-                <div className="exported-content">
-                  <div className="export-icon">
-                    <Download size={30} />
-                  </div>
-                  <h3>Take your team’s workflow with you.</h3>
-                  <p>
-                    Your ZIP contains the fixed Python runner, current workflow, prompts, example
-                    inputs, and setup instructions.
-                  </p>
-                  <ol className="export-steps">
-                    <li>
-                      <span>1</span>
-                      <div>
-                        <strong>Extract to a new folder</strong>
-                        <p>Python 3.10 or newer is required.</p>
-                      </div>
-                    </li>
-                    <li>
-                      <span>2</span>
-                      <div>
-                        <strong>Try the mock run</strong>
-                        <p>Open start.bat on Windows, or run bash start.sh on macOS/Linux.</p>
-                      </div>
-                    </li>
-                    <li>
-                      <span>3</span>
-                      <div>
-                        <strong>Review, then approve</strong>
-                        <p>
-                          The runner prints the exact command to continue. Final delivery waits for
-                          your approval.
-                        </p>
-                      </div>
-                    </li>
-                  </ol>
-                  <div className="note">
-                    For real execution, configure model names and credentials locally, then run with
-                    --mode real. See the bundled README.
-                  </div>
-                  <button className="primary full" onClick={() => setModal(null)}>
-                    Back to canvas
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
+      {!!busy && (
+        <LongWaitNotice
+          key={busy}
+          activity={
+            {
+              plan: 'Your model is designing the workflow.',
+              check: 'Checking your workflow.',
+              export: 'Preparing your download.',
+              template: 'Loading the example.',
+            }[busy] || 'Processing your request.'
+          }
+        />
       )}
       {tourStep !== null && (
         <Suspense fallback={null}>

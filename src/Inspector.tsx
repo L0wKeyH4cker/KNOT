@@ -16,20 +16,50 @@ export function Field({
   label,
   children,
   hint,
+  error,
 }: {
   label: string;
   children: React.ReactNode;
   hint?: string;
+  error?: string;
 }) {
   const id = useId();
-  const control = isValidElement<{ id?: string; 'aria-describedby'?: string }>(children)
-    ? cloneElement(children, { id, 'aria-describedby': hint ? id + '-hint' : undefined })
+  const element = isValidElement<{
+    id?: string;
+    required?: boolean;
+    'aria-label'?: string;
+    'aria-describedby'?: string;
+    'aria-invalid'?: boolean;
+  }>(children)
+    ? children
+    : null;
+  const description = [hint && id + '-hint', error && id + '-error'].filter(Boolean).join(' ');
+  const control = element
+    ? cloneElement(element, {
+        id,
+        'aria-label': element.props['aria-label'] || (element.props.required ? label : undefined),
+        'aria-describedby': description || undefined,
+        'aria-invalid': error ? true : undefined,
+      })
     : children;
   return (
     <div className="field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {element?.props.required && (
+          <span className="required-mark" aria-hidden="true">
+            {' '}
+            *
+          </span>
+        )}
+      </label>
       {control}
       {hint && <small id={id + '-hint'}>{hint}</small>}
+      {error && (
+        <small className="field-error" id={id + '-error'}>
+          {error}
+        </small>
+      )}
     </div>
   );
 }
@@ -167,16 +197,12 @@ export default function Inspector({
               <ShieldCheck size={14} />
               Tools & permissions
             </div>
-            <p className="muted">Enable tools on both this task and its agent.</p>
             <CheckList
               values={TOOLS}
               selected={c.tools || []}
               onChange={(tools) => set({ tools })}
             />
-            <Field
-              label="Readable paths"
-              hint="One relative file or directory per line. Empty means no access."
-            >
+            <Field label="Readable paths">
               <textarea
                 rows={2}
                 placeholder="inputs/brief.txt"
@@ -191,7 +217,7 @@ export default function Inspector({
                 }
               />
             </Field>
-            <Field label="Writable paths" hint="Only paths inside results/ are allowed.">
+            <Field label="Writable paths">
               <textarea
                 rows={2}
                 placeholder="results/drafts/"
@@ -210,7 +236,7 @@ export default function Inspector({
         )}
         {node.type === 'shared_resource' && (
           <>
-            <Field label="Available resources" hint="Add or edit resources in Project settings.">
+            <Field label="Available resources">
               <div className="check-list">
                 {wf.resources.length ? (
                   wf.resources.map((r) => (
@@ -226,13 +252,7 @@ export default function Inspector({
                           })
                         }
                       />
-                      <span>
-                        {r.name}
-                        <small>
-                          {r.path}
-                          {r.example ? ' · example' : ''}
-                        </small>
-                      </span>
+                      <span>{r.name}</span>
                     </label>
                   ))
                 ) : (
@@ -252,9 +272,6 @@ export default function Inspector({
                 onChange={(e) => set({ instructions: e.target.value })}
               />
             </Field>
-            <div className="note amber">
-              The runner pauses here until the assigned reviewer explicitly approves.
-            </div>
           </>
         )}
         {node.type === 'condition' && (
@@ -290,7 +307,7 @@ export default function Inspector({
                 <option value="contains">Contains</option>
               </select>
             </Field>
-            <Field label="Value" hint="JSON booleans, numbers and quoted strings are supported.">
+            <Field label="Value">
               <input
                 defaultValue={JSON.stringify(c.value)}
                 key={node.id + '-value-' + JSON.stringify(c.value)}
@@ -303,14 +320,10 @@ export default function Inspector({
                 }}
               />
             </Field>
-            <div className="note">
-              T runs when true; F runs when false. The other branch is skipped.
-            </div>
           </>
         )}
         {node.type === 'output' && (
           <>
-            <p className="muted">Choose results to save as files when this block runs.</p>
             {(c.mappings || []).map((m, i) => (
               <div className="mapping-card" key={i}>
                 <Field label="Source result">
@@ -389,14 +402,6 @@ export default function Inspector({
             </button>
           </>
         )}
-        {node.type === 'parallel' && (
-          <div className="note">
-            Connect several tasks to run in parallel, up to your project's concurrency limit.
-          </div>
-        )}
-        {node.type === 'start' && (
-          <div className="note">Drag from the right port to connect the first task.</div>
-        )}
         {node.type !== 'start' && (
           <>
             <div className="section-label">
@@ -412,17 +417,12 @@ export default function Inspector({
                 <option value="all_success">Require every branch to succeed</option>
               </select>
             </Field>
-            <p className="muted">
-              {c.join_rule === 'all_success'
-                ? 'A skipped branch skips this block.'
-                : 'Skipped branches do not block a selected path.'}
-            </p>
             <Field label="Shared input results">
               <div className="dependency-list">
                 {dataSources.length ? (
                   dataSources.map((n) => <span key={n.id}>{n.label}</span>)
                 ) : (
-                  <p>Connect the blue ports to share an upstream result.</p>
+                  <p>No connected results</p>
                 )}
               </div>
             </Field>

@@ -6,11 +6,12 @@ import {
   ChevronRight,
   FolderOpen,
   Github,
+  HelpCircle,
   Paperclip,
 } from 'lucide-react';
 import type { Workflow } from './model';
 import { useEffect, useRef } from 'react';
-import BrandLogo from './BrandLogo';
+import BrandLogo, { HomeLogo } from './BrandLogo';
 
 type Props = {
   projects: Workflow[];
@@ -50,9 +51,7 @@ export default function Home({
   return (
     <div className="home-page" data-testid="home-page">
       <header className="home-header">
-        <a className="home-brand" href="#" aria-label="KNOT home">
-          <BrandLogo decorative />
-        </a>
+        <HomeLogo />
         <button className="home-projects" onClick={onProjects}>
           <FolderOpen size={16} />
           My projects
@@ -178,8 +177,9 @@ export default function Home({
           GitHub
           <ArrowUpRight size={16} aria-hidden="true" />
         </a>
-        <button onClick={onHelp}>
-          A quick guide <ArrowRight size={13} />
+        <button className="home-guide" onClick={onHelp}>
+          <HelpCircle size={22} aria-hidden="true" />
+          A quick guide <ArrowRight size={20} aria-hidden="true" />
         </button>
       </footer>
     </div>

@@ -152,4 +152,7 @@
   }
 })();
 
-]]></script></svg>
+]]></script><style>
+svg:focus { outline: none; }
+svg:focus-visible { filter: drop-shadow(0 0 3px #5873b8); }
+</style></svg>

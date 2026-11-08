@@ -259,7 +259,7 @@ test('browser Back cancels a new requirements draft before editing an existing p
   const requests = await modelFixtures(page);
   await openTemplate(page);
   const original = await getWorkflow(page);
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('link', { name: 'KNOT home', exact: true }).click();
   await page.getByRole('button', { name: 'Upload project requirements', exact: true }).click();
   await expect(page.getByTestId('requirements-file-input')).toBeAttached();
   await page.goBack();

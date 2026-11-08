@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound, LoaderCircle, PlugZap } from 'lucide-react';
 import { Field } from './Inspector';
+import LongWaitNotice from './LongWaitNotice';
 import { api } from './model';
 import { CONNECTION_PRESETS, connectionPreset, presetConnection } from './connections';
 import type { ConnectionPreset, ModelConnection } from './connections';
@@ -109,10 +110,7 @@ export default function ConnectionSettings({
                 : 'Credential status not checked'}
           </span>
         </div>
-        <Field
-          label="API key"
-          hint="Stored on this computer only; excluded from workflows and exports."
-        >
+        <Field label="API key">
           <input
             type="password"
             autoComplete="off"
@@ -148,7 +146,6 @@ export default function ConnectionSettings({
             Test connection
           </button>
         </div>
-        <p className="connection-test-hint">Tests send a short request to your selected model.</p>
       </div>
       <details className="connection-advanced" open={preset === 'custom' || undefined}>
         <summary>Advanced connection settings</summary>
@@ -181,6 +178,14 @@ export default function ConnectionSettings({
         <div className="connection-feedback error" role="alert">
           {error}
         </div>
+      )}
+      {pending && (
+        <LongWaitNotice
+          key={pending}
+          activity={
+            pending === 'test' ? 'Waiting for your model to respond.' : 'Saving your connection.'
+          }
+        />
       )}
     </div>
   );

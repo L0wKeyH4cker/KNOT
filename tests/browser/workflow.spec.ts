@@ -212,7 +212,7 @@ for (const prefix of ['knot', 'teamblocks']) {
       planner.credential_ref,
     );
     await page.getByRole('button', { name: 'Back', exact: true }).click();
-    await page.getByRole('button', { name: 'Home', exact: true }).click();
+    await page.getByRole('link', { name: 'KNOT home', exact: true }).click();
     await page.getByRole('button', { name: 'My projects', exact: true }).click();
     const opened = page.waitForEvent('popup');
     await page
@@ -322,7 +322,7 @@ test('AI is honest when credentials are absent; task model and planner are separ
   await page.getByLabel('Planning model', { exact: true }).fill('user-configured-model');
   await page.getByRole('button', { name: 'Generate with AI', exact: true }).click();
   await expect(page.getByRole('status')).toContainText(/credential|key|configure|未配置|凭证/i);
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'planner', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   expect((await getWorkflow(page)).agents.every((a: any) => a.model === '')).toBe(true);
 });
