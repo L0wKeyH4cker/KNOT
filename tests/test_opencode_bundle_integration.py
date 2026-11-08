@@ -15,10 +15,16 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
+import urllib.request
 import zipfile
 
+import server as editor_server
 from backend.bundle import build_bundle
-from tests.test_owner_connections import EXECUTION, REF_A, REF_B, owner_workflow
+from tests.test_owner_connections import EXECUTION, owner_workflow
+
+REF_A = "KNOT_BUNDLE_ALICE_API_KEY"
+REF_B = "KNOT_BUNDLE_BOB_API_KEY"
 
 
 class BundleFixtureAPI:
@@ -144,6 +150,45 @@ class BundleFixtureAPI:
 @unittest.skipUnless(os.environ.get("KNOT_OPENCODE_TEST_BINARY"), "Set KNOT_OPENCODE_TEST_BINARY for real exported OpenCode acceptance")
 class OpenCodeBundleIntegrationTests(unittest.TestCase):
     def test_exported_runner_routes_parallel_owners_and_delivers_joined_code(self):
+        self.exercise_export(False)
+
+    def test_personal_http_download_runs_without_configuring_keys_locally(self):
+        self.exercise_export(True)
+
+    def export_from_editor(self, root, flow, execution, keys):
+        editor_root = root / "editor"
+        editor_root.mkdir()
+        http = ThreadingHTTPServer(("127.0.0.1", 0), editor_server.Handler)
+        thread = threading.Thread(target=http.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{http.server_port}"
+
+        def post(path, value):
+            request = urllib.request.Request(base + path, data=json.dumps(value).encode(),
+                headers={"Content-Type": "application/json", "Origin": base}, method="POST")
+            return urllib.request.urlopen(request, timeout=15)
+
+        try:
+            with patch.object(editor_server, "ROOT", editor_root), patch.dict(os.environ), patch.object(editor_server, "hosted_planners", return_value=None):
+                with urllib.request.urlopen(base + "/api/health", timeout=10) as response:
+                    self.assertTrue(json.load(response)["credential_export_allowed"])
+                for ref, value in {**keys, "KNOT_UNUSED_TEST_KEY": "fixture-unrelated-key"}.items():
+                    with post("/api/credentials", {"credential_ref": ref, "key": value}) as response:
+                        self.assertNotIn(value, response.read().decode())
+                    # Export must read what the editor saved, independently of
+                    # the process environment or global provider credentials.
+                    os.environ.pop(ref, None)
+                with post("/api/export", {"workflow": flow, "execution": execution,
+                                         "include_member_credentials": True}) as response:
+                    self.assertIn("knot-personal-workspace.zip", response.headers["Content-Disposition"])
+                    self.assertEqual(response.headers["Cache-Control"], "no-store")
+                    return response.read()
+        finally:
+            http.shutdown()
+            http.server_close()
+            thread.join(timeout=3)
+
+    def exercise_export(self, include_keys):
         binary = Path(os.environ["KNOT_OPENCODE_TEST_BINARY"]).resolve(strict=True)
         self.assertTrue(binary.is_file())
         scratch = Path(__file__).resolve().parents[1] / ".test-tmp"
@@ -157,20 +202,28 @@ class OpenCodeBundleIntegrationTests(unittest.TestCase):
             self.addCleanup(api.close)
             for member in flow["project"]["members"]:
                 member["connection"]["base_url"] = api.base
+                member["connection"]["credential_ref"] = REF_B if member["id"] == "bob" else REF_A
             execution = {**EXECUTION, "task_timeout_seconds": 90}
-            archive_bytes = build_bundle(flow, execution)
             keys = {REF_A: "fixture-bundle-alice-14398", REF_B: "fixture-bundle-bob-65372"}
+            archive_bytes = (self.export_from_editor(root, flow, execution, keys) if include_keys
+                             else build_bundle(flow, execution))
             with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
                 self.assertIn("runtime/opencode.py", archive.namelist())
                 self.assertIn("runtime/owner_connections.py", archive.namelist())
                 for name in archive.namelist():
+                    self.assertNotIn(b"fixture-unrelated-key", archive.read(name))
+                    if include_keys and name == ".env":
+                        continue
                     for value in keys.values():
                         self.assertNotIn(value.encode(), archive.read(name))
+                self.assertEqual(".env" in archive.namelist(), include_keys)
                 archive.extractall(runner)
-            (runner / ".env").write_text("\n".join(f"{ref}={value}" for ref, value in keys.items()) + "\n", encoding="utf-8")
+            if not include_keys:
+                (runner / ".env").write_text("\n".join(f"{ref}={value}" for ref, value in keys.items()) + "\n", encoding="utf-8")
             environment = dict(os.environ)
             for ref in keys:
                 environment.pop(ref, None)
+            environment.pop("PYTHONPATH", None)
             environment.update({"PATH": str(binary.parent) + os.pathsep + environment.get("PATH", ""),
                                 "KNOT_RUNS_DIR": str(root / "registry"), "PYTHONUTF8": "1"})
             completed = subprocess.run([sys.executable, "-X", "utf8", "knot.py", "run", "--plain"],

@@ -10,9 +10,11 @@ from urllib.parse import urlsplit
 
 from backend.planner import PlanningError, build_planner_agent
 from runtime.providers import ProviderError, _post
-from runtime.security import ENV_RE, register_secret
+from runtime.security import ENV_RE, register_secret, safe_path
+from runtime.owner_connections import resolve_owner_connection, validate_owner_connections
 
 _LOCK = threading.RLock()
+CREDENTIAL_VALUE = re.compile(r"[A-Za-z0-9_.-]{8,4096}")
 KNOWN_REFS = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"}
 DEEPSEEK_CONNECTION = {
     "provider": "openai", "model": "deepseek-flash",
@@ -36,12 +38,13 @@ def credential_status(root: Path) -> dict:
 def save_credential(root: Path, ref, value) -> dict:
     if not isinstance(ref, str) or not ENV_RE.fullmatch(ref) or not ref.endswith(("_KEY", "_TOKEN", "_SECRET")):
         raise PlanningError("凭证名称必须是以 _KEY、_TOKEN 或 _SECRET 结尾的大写环境变量名。")
-    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{8,4096}", value):
+    if not isinstance(value, str) or not CREDENTIAL_VALUE.fullmatch(value):
         raise PlanningError("请输入有效的 API Key，不要包含空格或换行。")
-    path = root / ".env.local"
     with _LOCK:
-        if path.is_symlink():
-            raise PlanningError("无法保存到符号链接形式的配置文件。")
+        try:
+            path = safe_path(root, ".env.local", (".env.local",))
+        except (ValueError, OSError):
+            raise PlanningError("无法保存到符号链接或不安全的配置文件。") from None
         lines = path.read_text(encoding="utf-8-sig").splitlines() if path.exists() else []
         lines = [line for line in lines if line.partition("=")[0].strip() != ref]
         lines.append(f"{ref}={value}")
@@ -56,6 +59,54 @@ def save_credential(root: Path, ref, value) -> dict:
         register_secret(value)
         os.environ[ref] = value
         return credential_status(root)
+
+
+def saved_member_credentials(root: Path, workflow: dict) -> dict[str, str]:
+    """Read only selected task owners' keys explicitly saved in this editor.
+
+    Environment-only credentials, planner keys and unused members are not copied.
+    This function returns private values only to the local ZIP export path.
+    """
+    issues = validate_owner_connections(workflow, require_credentials=False)
+    if issues:
+        raise PlanningError("请先完成任务负责人的连接设置。", issues=issues)
+    routes = [(node, resolve_owner_connection(workflow, node)) for node in workflow["nodes"]
+              if node["type"] == "agent_task"]
+    refs = {route["credential_ref"] for _, route in routes}
+    selected: dict[str, str] = {}
+    invalid: set[str] = set()
+    with _LOCK:
+        try:
+            path = safe_path(root, ".env.local", (".env.local",))
+            # Bound the read and reject unsafe filesystem targets before opening.
+            if path.exists() and (not path.is_file() or path.stat().st_size > 2_000_000):
+                raise ValueError("Invalid credential file")
+            content = path.read_bytes().decode("utf-8-sig") if path.is_file() else ""
+        except (ValueError, OSError):
+            raise PlanningError("无法读取本机保存的成员凭据，请检查 .env.local 文件。") from None
+        for line in content.split("\n"):
+            # save_credential writes unquoted NAME=value lines with LF endings.
+            name, separator, value = line.partition("=")
+            ref = name.strip()
+            if ref not in refs:
+                continue
+            if (not separator or name != ref or ref in selected or ref in invalid
+                    or not CREDENTIAL_VALUE.fullmatch(value)):
+                invalid.add(ref)
+                selected.pop(ref, None)
+                continue
+            selected[ref] = value
+    problems = []
+    for node, route in routes:
+        ref = route["credential_ref"]
+        if ref not in selected:
+            problems.append({"severity": "error", "code": "owner_credential_not_saved", "node_id": node["id"],
+                             "message": f"{route['owner_name']}：请在网页成员连接中重新填写并 Save API key（{ref}）。"})
+    if problems:
+        raise PlanningError("个人运行包需要各任务负责人的已保存 API key。", issues=problems)
+    for value in selected.values():
+        register_secret(value)
+    return selected
 
 
 def test_connection(connection) -> dict:

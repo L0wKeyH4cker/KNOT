@@ -1763,6 +1763,28 @@ kbd {
 .workspace-export-form .note {
   font-size: 15px;
 }
+.export-credentials-option {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+.export-credentials-option label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.export-credentials-option p,
+.export-key-notice {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 8px 0 0;
+}
 .export-run-guide {
   margin-top: 30px;
   padding-top: 28px;

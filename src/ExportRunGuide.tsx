@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { Check, Copy, Terminal } from 'lucide-react';
 
-export default function ExportRunGuide({ backend }: { backend?: 'codex' | 'claude' | 'opencode' }) {
+export default function ExportRunGuide({
+  backend,
+  includesCredentials = false,
+}: {
+  backend?: 'codex' | 'claude' | 'opencode';
+  includesCredentials?: boolean;
+}) {
   const [platform, setPlatform] = useState<'windows' | 'unix'>(() =>
     /Win/i.test(navigator.platform) ? 'windows' : 'unix',
   );
@@ -74,8 +80,9 @@ export default function ExportRunGuide({ backend }: { backend?: 'codex' | 'claud
             <p>Use the folder containing knot.py. Add any starting project code to workspace/.</p>
             {backend === 'opencode' && (
               <p>
-                Copy .env.example to .env and fill in each member's API key before starting. Keep
-                .env on this computer.
+                {includesCredentials
+                  ? 'Your personal package includes .env with the saved member keys. Extract it and run the command below; no key entry is needed. Keep this ZIP and .env private.'
+                  : "Copy .env.example to .env and fill in each member's API key before starting. Keep .env on this computer."}
               </p>
             )}
           </div>
@@ -111,7 +118,9 @@ export default function ExportRunGuide({ backend }: { backend?: 'codex' | 'claud
       </p>
       <p className="export-guide-help">
         {backend === 'opencode'
-          ? 'Needs Python 3.10+ and OpenCode installed, with member API keys configured in .env. '
+          ? includesCredentials
+            ? 'Needs Python 3.10+ and OpenCode installed. Member API keys are already in this personal package. '
+            : 'Needs Python 3.10+ and OpenCode installed, with member API keys configured in .env. '
           : 'Needs Python 3.10+ and your selected assistant installed and signed in. '}
         If you use Conda, activate your Python environment before running these commands. Full
         instructions are in README.md and START-HERE.md inside the ZIP.

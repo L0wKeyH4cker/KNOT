@@ -77,6 +77,12 @@ test('member API example opens, keeps owner routing and exports a real OpenCode 
   await page.screenshot({ path: resolve(artifactDir, 'example-canvas.png'), fullPage: true });
   await page.getByRole('button', { name: 'Export runner', exact: true }).click();
   await expect(page.getByLabel('Run with', { exact: true })).toHaveValue('opencode');
+  const includeKeys = page.getByRole('checkbox', {
+    name: 'Include saved member API keys',
+    exact: true,
+  });
+  // This real-server test never saves keys, so explicitly export the sharing package.
+  if (await includeKeys.isEnabled()) await includeKeys.uncheck();
   const downloadEvent = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download agent workspace', exact: true }).click();
   const download = await downloadEvent;

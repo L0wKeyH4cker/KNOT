@@ -207,6 +207,13 @@ export default function App() {
     model: '',
   });
   const [exportDownloaded, setExportDownloaded] = useState(false);
+  const [credentialExportAllowed, setCredentialExportAllowed] = useState<boolean | null>(null);
+  const [includeMemberCredentials, setIncludeMemberCredentials] = useState(true);
+  const [downloadedIncludesCredentials, setDownloadedIncludesCredentials] = useState(false);
+  const includingMemberCredentials =
+    execution.backend === 'opencode' &&
+    credentialExportAllowed === true &&
+    includeMemberCredentials;
   const plannerInitialized = useRef(plannerReady);
   const [draft, setDraft] = useState({ name: '', members: 3, goal: '', deliverable: '' });
   const [setupErrors, setSetupErrors] = useState<Partial<Record<keyof typeof draft, string>>>({});
@@ -433,21 +440,32 @@ export default function App() {
     };
   }, [persistCurrent]);
   useEffect(() => {
+    let active = true;
     api<{
       ok: boolean;
       planner_credentials: Record<string, boolean>;
       default_planner?: Planner | null;
+      credential_export_allowed?: boolean;
     }>('health')
       .then((x) => {
+        if (!active) return;
         setOnline(x.ok);
         setCredentials(x.planner_credentials || {});
+        setCredentialExportAllowed(x.ok === true && x.credential_export_allowed === true);
         if (!plannerInitialized.current) {
           if (x.default_planner) setPlanner(x.default_planner);
           plannerInitialized.current = true;
           setPlannerReady(true);
         }
       })
-      .catch(() => setOnline(false));
+      .catch(() => {
+        if (!active) return;
+        setOnline(false);
+        setCredentialExportAllowed(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [modal]);
   useEffect(() => {
     if (!plannerReady) return;
@@ -794,6 +812,23 @@ export default function App() {
       };
       assertSafeWorkflow(selection);
       const ownerIssues = selection.backend === 'opencode' ? ownerConnectionIssues(wf) : [];
+      const includeCredentials = selection.backend === 'opencode' && includingMemberCredentials;
+      if (includeCredentials) {
+        for (const member of wf.project.members) {
+          if (
+            member.connection &&
+            credentials[member.connection.credential_ref] === false &&
+            wf.nodes.some(
+              (node) => node.type === 'agent_task' && node.config.owner_id === member.id,
+            )
+          )
+            ownerIssues.push({
+              severity: 'error',
+              code: 'owner_credential_missing',
+              message: `${member.name}: enter an API key and click Save on this device in Project settings → Team members before downloading a personal package.`,
+            });
+        }
+      }
       if (ownerIssues.length) {
         setIssues(ownerIssues);
         setModal('check');
@@ -812,17 +847,45 @@ export default function App() {
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow: wf, execution: selection }),
+        body: JSON.stringify({
+          workflow: wf,
+          execution: selection,
+          include_member_credentials: includeCredentials,
+        }),
       });
       if (!res.ok) {
-        const x = await res.json();
-        throw Error(x.error || 'Export failed');
+        const x = await res.json().catch(() => ({}));
+        const exportIssues: Issue[] = Array.isArray(x.issues)
+          ? x.issues
+              .filter(
+                (issue: Issue) =>
+                  issue &&
+                  typeof issue.message === 'string' &&
+                  typeof issue.code === 'string' &&
+                  (issue.severity === 'error' || issue.severity === 'warning'),
+              )
+              .map((issue: Issue) => ({
+                severity: issue.severity,
+                code: issue.code,
+                message: issue.message,
+                ...(typeof issue.node_id === 'string' ? { node_id: issue.node_id } : {}),
+              }))
+          : [];
+        if (exportIssues.length) {
+          setIssues(exportIssues);
+          setModal('check');
+          return;
+        }
+        throw Error(typeof x.error === 'string' ? x.error : `Export failed (${res.status})`);
       }
       download(
         await res.blob(),
-        `${wf.project.name.replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'knot'}-runner.zip`,
+        includeCredentials
+          ? 'knot-personal-workspace.zip'
+          : `${wf.project.name.replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-') || 'knot'}-runner.zip`,
       );
       setExecution(selection);
+      setDownloadedIncludesCredentials(includeCredentials);
       setExportDownloaded(true);
     } catch (e) {
       notify((e as Error).message);
@@ -1595,6 +1658,12 @@ export default function App() {
                               : `Every role will use ${execution.backend === 'codex' ? 'Codex' : 'Claude'}${execution.model ? ` with ${execution.model}` : ' with its default model'}`}
                             . Tasks follow the connections and review gates on your canvas.
                           </p>
+                          {downloadedIncludesCredentials && (
+                            <p className="export-key-notice">
+                              Your personal ZIP includes saved member API keys in .env. Keep it
+                              private and do not share it.
+                            </p>
+                          )}
                         </>
                       ) : (
                         <form
@@ -1674,12 +1743,43 @@ export default function App() {
                               </button>
                             </div>
                           )}
+                          {execution.backend === 'opencode' && (
+                            <div className="export-credentials-option">
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={includingMemberCredentials}
+                                  disabled={credentialExportAllowed !== true || !!busy}
+                                  onChange={(event) =>
+                                    setIncludeMemberCredentials(event.target.checked)
+                                  }
+                                />
+                                <span>Include saved member API keys</span>
+                              </label>
+                              <p>
+                                {credentialExportAllowed === null
+                                  ? 'Checking whether this local editor can include saved keys…'
+                                  : credentialExportAllowed !== true
+                                    ? 'This editor exports without keys. Add them in the extracted package, or use your local KNOT editor to include saved keys.'
+                                    : includingMemberCredentials
+                                      ? 'Personal package: saved keys are written to .env, so you can extract and run. The ZIP contains plain-text keys; keep it private and do not share it.'
+                                      : 'Shareable package: no API keys are included. Fill in .env on the computer that will run it.'}
+                              </p>
+                            </div>
+                          )}
                           <div className="note">
                             {execution.backend === 'opencode'
-                              ? 'Requires Python 3.10+ and OpenCode on the execution computer. Add each member’s API key in the extracted package before running. No API keys are included in the ZIP.'
+                              ? 'Requires Python 3.10+ and OpenCode on the execution computer. Save each task owner’s provider, model and API key in Team members.'
                               : 'Requires Python 3.10+ and the selected coding CLI installed and signed in on your computer. Your account supplies model access. No API keys are included in the ZIP.'}
                           </div>
-                          <button className="primary full" type="submit" disabled={!!busy}>
+                          <button
+                            className="primary full"
+                            type="submit"
+                            disabled={
+                              !!busy ||
+                              (execution.backend === 'opencode' && credentialExportAllowed === null)
+                            }
+                          >
                             {busy === 'export' ? (
                               <LoaderCircle className="spin" size={17} />
                             ) : (
@@ -1689,7 +1789,14 @@ export default function App() {
                           </button>
                         </form>
                       )}
-                      <ExportRunGuide backend={execution.backend} />
+                      <ExportRunGuide
+                        backend={execution.backend}
+                        includesCredentials={
+                          exportDownloaded
+                            ? downloadedIncludesCredentials
+                            : includingMemberCredentials
+                        }
+                      />
                       {exportDownloaded && (
                         <button className="primary full" onClick={() => setModal(null)}>
                           Back to canvas

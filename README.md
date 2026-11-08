@@ -10,7 +10,7 @@
 
 1. 在画板上确认任务和连接，点击 **Export runner**。
 2. 在 **Run with** 选择 **Codex**、**Claude** 或 **OpenCode**。Codex/Claude 的共享模型可以留空。选择 OpenCode 时，先为团队成员配置连接，并为每个任务指定负责人，模型与密钥跟随负责人。
-3. 点击 **Download agent workspace**，解压到新目录。用户电脑需要 Python 3.10+ 和对应 CLI：[Codex 安装说明](https://developers.openai.com/codex/cli/)、[Claude Code 安装说明](https://code.claude.com/docs/en/setup)、[OpenCode CLI](https://opencode.ai/docs/cli/)。Codex/Claude 使用本机登录；OpenCode 需在运行包的 `.env` 或进程环境中提供成员凭据。
+3. 点击 **Download agent workspace**，解压到新目录。用户电脑需要 Python 3.10+ 和对应 CLI：[Codex 安装说明](https://developers.openai.com/codex/cli/)、[Claude Code 安装说明](https://code.claude.com/docs/en/setup)、[OpenCode CLI](https://opencode.ai/docs/cli/)。Codex/Claude 使用本机登录；本地 OpenCode 个人包自动携带网页已保存的任务负责人凭据，无需再次配置。
 4. 如有初始项目代码，放入 `workspace/`；按包内 **Inputs you must provide** 补齐资料。接下来按操作系统启动任务。
 
 ### Windows：启动任务
@@ -40,7 +40,11 @@ sh knot.sh run --interactive
 
 运行电脑需安装 OpenCode CLI **2.2.6 或以上的 2.x 版本**。已有 npm 时可运行 `npm install -g @opencode/cli@2.2.6`。KNOT 为每项任务启动 `--standalone` 独立实例，使用任务专属的临时配置，结束后清理；不会复用 OpenCode 默认共享后台中的账号。
 
-导出时选择 **OpenCode**。ZIP 保留成员连接配置，只包含空白 `.env.example`，不包含在编辑器中保存的真实 key。解压后将 `.env.example` 复制为 `.env`，为其中的成员引用填写已获授权的 key，或使用同名环境变量；然后执行 `.\knot.cmd run --validate`（macOS/Linux：`sh knot.sh run --validate`）检查，再按上文启动任务。连接缺失会明确停止，不会换用其他成员或本机全局登录的账号。`--validate` 不调用线上模型，因此不代表模型权限或配额已经验证。
+在本地编辑器保存各任务负责人的 key，导出时选择 **OpenCode**，保持 **Include saved member API keys** 勾选。下载的 `knot-personal-workspace.zip` 会自动包含已配置的 `.env`，解压后即可启动，无需手工填写密钥。只写入实际任务负责人的 key；未参与执行的成员、规划模型和其他环境凭据不会被一起导出。未保存某位负责人的 key 时，导出会指出该成员，先保存再下载即可。
+
+**个人包中的 `.env` 含明文密钥，ZIP 和解压目录只供本人使用，不要分享或提交到 Git。** 如需分享流程，取消上述选项，下载只含空白 `.env.example` 的包，由接收者配置自己的 `.env`。公开部署不提供携带服务器凭据的导出。工作流 JSON、提示词和浏览器存储始终只保留凭据引用。
+
+可执行 `.\knot.cmd run --validate`（macOS/Linux：`sh knot.sh run --validate`）检查，再按上文启动任务。连接缺失会明确停止，不会换用其他成员或本机全局登录的账号。`--validate` 不调用线上模型，因此不代表模型权限或配额已经验证。
 
 所有任务仍在这一台电脑上运行。把同一个 ZIP 发到多台电脑分别启动，会产生独立运行，不会自动组成远程团队。KNOT 负责依赖、并行、结果交接和人工审核，OpenCode 负责单个任务里的代码编辑与命令执行。负责人连接的服务商、模型和凭据引用随运行记录保存；恢复与失败重试必须沿用原任务配置，密钥值不写入记录。
 
@@ -103,7 +107,7 @@ Output 节点将项目文件交付到 `results/project/`，画板配置的报告
 
 任务按实际交付物和验收判断完成。某条采集命令失败后，若其他已获允许的方式取得相同质量的证据并完成必要检查，应记录方法限制，而不是仅因失败尝试把任务判为阻断；明确规定的采集方法和未完成的必要检查仍必须满足。
 
-启动器默认运行真实本地 Agent；缺少 CLI、认证或输入资料时停止并说明原因，不会退回 mock。账号额度与模型权限由用户的 CLI 配置提供，网页版聊天本身不代表具备本地执行能力。工作副本用于隔离并行改动，不是操作系统沙箱；命令权限由所选 CLI 执行。ZIP 不携带开发机器上的凭证。
+启动器默认运行真实本地 Agent；缺少 CLI、认证或输入资料时停止并说明原因，不会退回 mock。账号额度与模型权限由用户配置的连接提供，网页版聊天本身不代表具备本地执行能力。工作副本用于隔离并行改动，不是操作系统沙箱；命令权限由所选 CLI 执行。仅明确选择携带密钥的 OpenCode 个人包包含所需成员凭据。
 
 ## 启动项目
 
@@ -189,13 +193,13 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 
 规划模型负责生成结构化草案；下文的逐 Agent 连接配置适用于高级 `--mode real` 直接 API 模式。本地 Codex/Claude 模式使用导出时选择的统一连接。直接 API 模式支持 OpenAI 兼容接口与 Anthropic Messages；OpenAI 官方 GPT-6 模型执行带工具的任务时自动使用 Responses，模型名称由用户填写。
 
-工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY`，不要把真实 key 放进节点、prompt 或 JSON。模型设置中的 **API key → Save on this device** 会将凭证保存到本机 `.env.local` 并立即生效；密码框随后清空，浏览器本地存储和导出 ZIP 不包含 key。也可以自行设置后端环境变量。
+工作流中只允许保存环境变量名称，例如 `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY`，不要把真实 key 放进节点、prompt 或 JSON。模型设置中的 **API key → Save on this device** 会将凭证保存到本机 `.env.local` 并立即生效；密码框随后清空，浏览器本地存储不包含 key。只有 OpenCode 个人包会把实际任务负责人已保存的 key 单独写入 `.env`；其他导出保持无密钥。也可以自行设置后端环境变量。
 
 选择 **DeepSeek** 会自动填写官方 API 地址、`DEEPSEEK_API_KEY` 引用和 `deepseek-flash` 模型 ID；可按账号实际支持的模型修改。DeepSeek 使用现有 OpenAI-compatible 适配器，工作流 schema 不变。参考 [DeepSeek 官方接入说明](https://api-docs.deepseek.com/)。点击 **Test connection** 会发送一条简短测试请求；常规服务限制为 16 个输出 token，OpenAI 官方接口上限为 512（包含推理 token），只有完整返回非空文本才显示成功。测试不发送项目材料。
 
 模型字段必须填写 API 模型 ID。例如 GPT-6 Luna 的 ID 是 `gpt-6-luna`，不能填写带空格的展示名称 `GPT-6 Luna`。规划模型和 Agent 的模型字段都遵守这一规则；参见 [OpenAI 官方模型说明](https://developers.openai.com/api/docs/models/gpt-6-luna)。页面显示 `Credential detected` 只代表配置中有 key，不代表生成请求已成功。
 
-开发后端启动时优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。在设置页显式保存的新 key 会更新当前后端进程和 `.env.local`，无需重启。规划模型的非敏感连接设置保存在当前浏览器中。下载的运行包使用自己的 `.env`，凭证需在运行包所在电脑另外配置。
+开发后端启动时优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。在设置页显式保存的新 key 会更新当前后端进程和 `.env.local`，无需重启。规划模型的非敏感连接设置保存在当前浏览器中。下载的运行包使用自己的 `.env`；OpenCode 个人包自动带上负责人已保存的凭据，无密钥分享包需在运行电脑配置。
 
 - **local**（默认）：调用用户电脑上的编程工具。Codex/Claude 使用共享连接；OpenCode 按任务负责人选择成员模型与凭据。各任务维护独立上下文和工作副本。
 - **mock**（显式选择）：固定示例结果，验证调度、条件、权限和人工审核，不调用收费 API。

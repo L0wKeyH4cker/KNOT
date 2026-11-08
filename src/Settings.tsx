@@ -172,7 +172,8 @@ export function ProjectSettings({
       </div>
       <p className="muted">
         Choose OpenCode when exporting to run each task with its owner's model and API key. Keys
-        saved here stay on this device; set them up again in the extracted work package.
+        must be saved with Save on this device. Local personal exports can include the saved keys so
+        the extracted package is ready to run.
       </p>
       {wf.project.members.map((m, i) => (
         <article className="member-settings" key={m.id} aria-label={`Member ${i + 1} settings`}>

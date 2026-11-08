@@ -9,9 +9,9 @@ import re
 import zipfile
 
 from runtime.validation import validate_workflow
-from runtime.security import contains_secret
+from runtime.security import contains_secret, register_secret
 from runtime.local_config import DEFAULT_EXECUTION, validate_execution
-from runtime.owner_connections import validate_owner_connections
+from runtime.owner_connections import resolve_owner_connection, validate_owner_connections
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,99}$")
@@ -25,10 +25,13 @@ class BundleError(ValueError):
 
 
 def credential_references(workflow, *, owners_only=False):
-    """Read reference names only; real credentials never belong in a bundle."""
+    """Read reference names only; private values enter through a separate argument."""
     refs = set()
     if not isinstance(workflow, dict):
         return refs
+    if owners_only:
+        return {resolve_owner_connection(workflow, node)["credential_ref"]
+                for node in workflow.get("nodes", []) if node.get("type") == "agent_task"}
     if not owners_only:
         for agent in workflow.get("agents", []) if isinstance(workflow.get("agents"), list) else []:
             if isinstance(agent, dict) and isinstance(agent.get("credential_ref"), str):
@@ -192,16 +195,19 @@ For manual use in a coding assistant, these files describe the workflow. Only th
 """
 
 
-def bundle_readme(workflow, missing, execution):
+def bundle_readme(workflow, missing, execution, *, personal=False):
     missing_rows = "\n".join(f"- `{p}`" for p in missing) or "None. All declared inline resources are included."
     backend = execution.get("backend") or "Choose Codex or Claude on first start"
     model = execution.get("model") or "Use the selected CLI's default model"
     by_owner = execution.get("backend") == "opencode"
+    credential_setup = ("This personal package already contains the saved task-owner keys in `.env`; no key re-entry is needed. "
+                        if personal else
+                        "Copy `.env.example` to `.env` in this extracted folder and fill the named member credentials, "
+                        "or provide those names through the runner's environment. The keys saved in the editor are not copied into the ZIP. ")
     model_line = "Models: **From each task owner's connection in workflow.json**" if by_owner else f"Shared model: **{model}**"
     setup = ("Install Python 3.10+ and [OpenCode CLI](https://opencode.ai/docs/cli/), version 2.2.6 or newer in the 2.x series. "
              "With npm available, install the supported baseline using `npm install -g @opencode/cli@2.2.6`. "
-             "Copy `.env.example` to `.env` in this extracted folder and fill the named member credentials, "
-             "or provide those names through the runner's environment. The keys saved in the editor are not copied into the ZIP. "
+             + credential_setup +
              "KNOT uses each task's `owner_id` to select that member's provider, model and credential reference. "
              "Run `python knot.py run --validate` to check the task connections and local CLI before starting."
              if by_owner else
@@ -214,17 +220,21 @@ def bundle_readme(workflow, missing, execution):
                        "KNOT never silently switches to another member's key or a globally logged-in account. "
                        "Each task starts its own standalone OpenCode instance with a temporary configuration that is removed after execution; "
                        "it does not reuse the default shared OpenCode background service. "
-                       "Only credential reference names are exported. Per-Agent API fields belong to the separate direct API mode."
+                       + ("The saved task-owner keys appear only in `.env`; workflow and task files contain references. " if personal else "Only credential reference names are exported. ")
+                       + "Per-Agent API fields belong to the separate direct API mode."
                        if by_owner else
                        "All roles share the choice in `knot.json`; blank per-agent API models in `workflow.json` do not block local execution. "
                        "The CLI must be installed and authenticated. Requests use its configured account and may consume its quota or API credits. "
                        "No credentials from the export machine are included.")
     execution_note = ("OpenCode backend, an empty shared model, and a local task timeout; member models live in `workflow.json`."
                       if by_owner else "one backend, optional shared model, and a local task timeout.")
+    privacy_note = ("**Personal package — contains plaintext API keys in `.env`. Keep this ZIP and extracted folder private; "
+                    "do not share or upload them. Export without member credentials when sharing.**\n\n" if personal else "")
     return f"""# KNOT local agent workspace
 
 Project: **{workflow['project']['name']}**
 
+{privacy_note}
 This ZIP contains your reviewed workflow and a local scheduler. Coding agents write and run the project on your computer. It does not need the KNOT editor or server after download.
 
 Selected backend: **{backend}**
@@ -345,7 +355,7 @@ Keep `workflow.json` and the execution configuration unchanged when resuming a s
 
 {missing_rows}
 
-Resources marked `example: true` are fictional demo inputs. Replace them with appropriate project materials. Only declared inline resource contents are bundled; private files from the editor machine are not copied.
+Resources marked `example: true` are fictional demo inputs. Replace them with appropriate project materials. Only declared inline project resources are bundled; unrelated private files from the editor machine are not copied.
 
 ## Advanced: explicit simulation or direct API mode
 
@@ -360,7 +370,7 @@ The legacy `--mode real` path calls model APIs directly using each agent's provi
 """
 
 
-def build_bundle(workflow, execution=None):
+def build_bundle(workflow, execution=None, *, member_credentials=None):
     reject_secrets(workflow)
     reject_secrets(execution)
     try:
@@ -377,6 +387,20 @@ def build_bundle(workflow, execution=None):
     refs = sorted(credential_references(workflow, owners_only=execution.get("backend") == "opencode"))
     if any(not ENV_NAME.fullmatch(ref) for ref in refs):
         raise BundleError("凭证引用必须是大写环境变量名称，不能是真实 API key。")
+    personal = member_credentials is not None
+    if personal:
+        if execution.get("backend") != "opencode":
+            raise BundleError("只有 OpenCode 个人运行包可以包含成员凭据。")
+        if not isinstance(member_credentials, dict) or set(member_credentials) != set(refs):
+            raise BundleError("个人运行包必须只包含实际任务负责人的完整凭据集合。")
+        if any(not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{8,4096}", value)
+               for value in member_credentials.values()):
+            raise BundleError("已保存的成员凭据格式无效，请在网页重新 Save API key。")
+        # Opaque keys must not be smuggled through task text or resource content.
+        for value in member_credentials.values():
+            register_secret(value)
+        reject_secrets(workflow)
+        reject_secrets(execution)
     contents = {}
     resource_paths = set()
     missing = []
@@ -398,7 +422,12 @@ def build_bundle(workflow, execution=None):
         archive.writestr("AGENTS.md", workspace_instructions(workflow, execution))
         archive.writestr("CLAUDE.md", workspace_instructions(workflow, execution))
         archive.writestr("workspace/", "")
-        archive.writestr(".gitignore", ".env*\n!.env.example\n.venv/\n.knot/\nlogs/\n__pycache__/\nnode_modules/\n")
+        archive.writestr(".gitignore", ".env\n.env.*\n!.env.example\ncredentials.json\nsecrets.json\nauth.json\n*.key\n*.pem\n.venv/\n.knot/\nlogs/\n__pycache__/\nnode_modules/\n")
+        if personal:
+            env_info = zipfile.ZipInfo(".env")
+            env_info.external_attr = 0o600 << 16
+            archive.writestr(env_info, "# Personal package: do not share this file or ZIP.\n"
+                             + "".join(f"{ref}={member_credentials[ref]}\n" for ref in refs))
         for index, node in enumerate(workflow["nodes"], 1):
             if node["type"] == "agent_task":
                 archive.writestr(f"tasks/task-{index:03d}-{node['id']}.md", task_guide(workflow, node, execution))
@@ -424,7 +453,7 @@ def build_bundle(workflow, execution=None):
         info = zipfile.ZipInfo("start.sh")
         info.external_attr = 0o755 << 16
         archive.writestr(info, START_SH)
-        readme = bundle_readme(workflow, missing, execution)
+        readme = bundle_readme(workflow, missing, execution, personal=personal)
         archive.writestr("README.md", readme)
         archive.writestr("START-HERE.md", readme)
     return output.getvalue()

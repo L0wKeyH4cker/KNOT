@@ -21,6 +21,8 @@
 
 导出执行配置 `knot.json` 中的 `backend: "opencode"` 表示按任务 `owner_id` 选择成员连接，此时共享 `model` 必须为空。任务仍使用 `agent_id` 对应的角色与提示词；Agent 上的旧 API 配置不覆盖成员连接。所有编码任务必须有完整的负责人连接，启动时还会检查凭据是否存在。仅负责人工审核的成员不需要 API 连接。
 
+本地导出请求可设置 `include_member_credentials: true`，此选项不属于工作流 schema。后端只从编辑器保存的 `.env.local` 提取实际任务负责人引用的 key，单独放入个人 ZIP 的 `.env`；不写进 `workflow.json`、`knot.json`、任务提示词或浏览器存储。未保存所需 key 时拒绝导出。选项为 false 或省略时保留无密钥包；公开部署禁止携带服务器凭据。
+
 OpenCode 走 `local` 编码路径，沿用独立工作副本、显式数据交接、审核与失败重试。运行记录只保存成员、模型与凭据引用等连接信息，恢复时核对配置；不保存真实 key。`codex` / `claude` 仍使用 `knot.json` 的共享模型，`--mode real` 仍使用逐 Agent 直接 API 配置。
 
 ## 两种连线

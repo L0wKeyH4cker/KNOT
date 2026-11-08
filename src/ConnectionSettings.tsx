@@ -132,6 +132,11 @@ export default function ConnectionSettings({
             onChange={(event) => setKey(event.target.value)}
           />
         </Field>
+        {memberConnection && (
+          <p className="muted">
+            Click Save on this device after entering a key. Personal exports use the saved key.
+          </p>
+        )}
         <div className="connection-actions">
           <button
             className="secondary"
@@ -162,7 +167,7 @@ export default function ConnectionSettings({
           label={planning ? 'Credential environment variable' : 'Credential reference'}
           hint={
             memberConnection
-              ? 'This member has a separate credential reference. The key stays on this device and is not included in exports.'
+              ? 'This member has a separate credential reference. Personal exports can include the saved key in .env; shareable exports exclude it.'
               : 'Use the environment variable name, e.g. OPENAI_API_KEY.'
           }
         >

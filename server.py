@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
@@ -11,7 +12,7 @@ from urllib.parse import unquote, urlsplit
 
 from backend.bundle import BundleError, build_bundle, reject_secrets
 from backend.documents import DocumentError, extract_document
-from backend.connections import credential_status, save_credential, test_connection, DEEPSEEK_CONNECTION
+from backend.connections import credential_status, save_credential, saved_member_credentials, test_connection, DEEPSEEK_CONNECTION
 from backend.planner import PlanningError, hosted_planners, plan_workflow
 from backend.template import load_template, load_owner_api_template
 from runtime.validation import validate_workflow
@@ -42,6 +43,42 @@ def load_environment():
 
 def safe_error(message):
     return redact(str(message))[:2000]
+
+
+def credential_export_allowed(handler) -> bool:
+    """Private ZIPs are only available through a directly local editor service.
+
+    Do not trust forwarded headers or an external Host even when a reverse proxy
+    connects from loopback. Vite's local /api proxy preserves its loopback Host.
+    """
+    if hosted_planners() is not None or any(os.environ.get(name) for name in
+            ("VERCEL", "VERCEL_ENV", "RENDER", "RENDER_SERVICE_ID", "NETLIFY", "WEBSITE_INSTANCE_ID")):
+        return False
+    try:
+        if not ipaddress.ip_address(handler.client_address[0]).is_loopback:
+            return False
+        if not ipaddress.ip_address(handler.server.server_address[0]).is_loopback:
+            return False
+        hosts = handler.headers.get_all("Host", [])
+        if len(hosts) != 1:
+            return False
+        address = urlsplit("http://" + hosts[0])
+        if (address.hostname not in ("127.0.0.1", "localhost", "::1") or address.username
+                or address.password or address.path or address.query or address.fragment or address.port == 0):
+            return False
+        if any(handler.headers.get(name) for name in
+               ("Forwarded", "X-Forwarded-Host", "X-Forwarded-For", "X-Forwarded-Proto")):
+            return False
+        origin = handler.headers.get("Origin")
+        if origin:
+            parsed = urlsplit(origin)
+            if (parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost", "::1")
+                    or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment
+                    or parsed.port not in (5173, handler.server.server_port)):
+                return False
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return False
+    return True
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -78,7 +115,8 @@ class Handler(BaseHTTPRequestHandler):
                 first = hosted[0] if hosted else None
                 default = {"provider": first.get("provider", "openai"), "model": first.get("model", ""),
                            "credential_ref": first["credential_ref"], "base_url": first.get("base_url", "")} if first else None
-            self.send_json(200, {"ok": True, "planner_credentials": credentials, "default_planner": default})
+            self.send_json(200, {"ok": True, "planner_credentials": credentials, "default_planner": default,
+                                 "credential_export_allowed": credential_export_allowed(self)})
         elif path == "/api/template":
             self.send_json(200, load_template())
         elif path == "/api/template/owner-api":
@@ -151,7 +189,21 @@ class Handler(BaseHTTPRequestHandler):
                             issues.extend(validate_owner_connections(workflow, require_credentials=False))
                     self.send_json(200, {"issues": issues})
                 else:
-                    self.send_bytes(200, build_bundle(workflow, body.get("execution")), "application/zip", {"Content-Disposition": 'attachment; filename="knot-workflow.zip"'})
+                    include_keys = body.get("include_member_credentials", False)
+                    if type(include_keys) is not bool:
+                        raise ValueError("include_member_credentials 必须是 true 或 false。")
+                    selected = None
+                    if include_keys:
+                        if not credential_export_allowed(self):
+                            self.send_json(403, {"error": "只有本机编辑器可以导出包含成员 API key 的个人运行包。"})
+                            return
+                        execution = validate_execution(body.get("execution"), allow_unselected=True)
+                        if execution["backend"] != "opencode":
+                            raise ValueError("包含成员凭据的个人运行包只支持 OpenCode。")
+                        selected = saved_member_credentials(ROOT, workflow)
+                    filename = "knot-personal-workspace.zip" if include_keys else "knot-workflow.zip"
+                    content = build_bundle(workflow, body.get("execution"), member_credentials=selected)
+                    self.send_bytes(200, content, "application/zip", {"Content-Disposition": f'attachment; filename="{filename}"'})
             elif path == "/api/plan":
                 workflow = plan_workflow(body.get("project"), body.get("resources", []), body.get("planner"))
                 self.send_json(200, {"workflow": workflow})
@@ -183,7 +235,7 @@ def main():
     load_environment()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"KNOT API: http://127.0.0.1:{args.port}", flush=True)
-    print("Real planning uses local environment credentials. No key values are returned to the browser.", flush=True)
+    print("Personal OpenCode exports may include the member keys explicitly saved in this local editor.", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
