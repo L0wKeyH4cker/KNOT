@@ -1080,7 +1080,6 @@ export default function App() {
             >
               <HelpCircle size={21} />
             </NavigationButton>
-            <span className="profile-avatar">Y</span>
           </nav>
           <div className="workspace">
             <div

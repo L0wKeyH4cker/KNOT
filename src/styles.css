@@ -312,17 +312,6 @@ kbd {
   color: #424f75;
   background: #dbe0f1;
 }
-.profile-avatar {
-  border-radius: 50%;
-  background: #eee9d7;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  font-size: 14px;
-  font-weight: 700;
-  color: #8c8467;
-}
 .workspace {
   min-width: 0;
   flex: 1;

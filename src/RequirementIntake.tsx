@@ -244,7 +244,7 @@ export default function RequirementIntake({
             />
           </Field>
           <button
-            className="secondary full"
+            className="primary full"
             disabled={locked || !configured || !document.text.trim()}
             onClick={() => void analyze()}
           >
