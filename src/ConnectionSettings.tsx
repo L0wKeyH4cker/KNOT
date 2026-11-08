@@ -13,6 +13,7 @@ export default function ConnectionSettings({
   onCredentialsChange,
   planning = false,
   disabled = false,
+  memberConnection = false,
 }: {
   connection: ModelConnection;
   onChange: (connection: ModelConnection & { base_url: string }) => void;
@@ -20,6 +21,7 @@ export default function ConnectionSettings({
   onCredentialsChange: (credentials: Record<string, boolean>) => void;
   planning?: boolean;
   disabled?: boolean;
+  memberConnection?: boolean;
 }) {
   const [key, setKey] = useState('');
   const [pending, setPending] = useState<'save' | 'test' | ''>('');
@@ -80,7 +82,14 @@ export default function ConnectionSettings({
           <select
             value={preset}
             disabled={locked}
-            onChange={(event) => onChange(presetConnection(event.target.value as ConnectionPreset))}
+            onChange={(event) =>
+              onChange(
+                presetConnection(
+                  event.target.value as ConnectionPreset,
+                  memberConnection ? connection.credential_ref : undefined,
+                ),
+              )
+            }
           >
             {Object.entries(CONNECTION_PRESETS).map(([id, item]) => (
               <option value={id} key={id}>
@@ -151,11 +160,16 @@ export default function ConnectionSettings({
         <summary>Advanced connection settings</summary>
         <Field
           label={planning ? 'Credential environment variable' : 'Credential reference'}
-          hint="Use the environment variable name, e.g. OPENAI_API_KEY."
+          hint={
+            memberConnection
+              ? 'This member has a separate credential reference. The key stays on this device and is not included in exports.'
+              : 'Use the environment variable name, e.g. OPENAI_API_KEY.'
+          }
         >
           <input
             value={connection.credential_ref}
             disabled={locked}
+            readOnly={memberConnection}
             onChange={(event) => change({ credential_ref: event.target.value })}
           />
         </Field>

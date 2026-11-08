@@ -1397,6 +1397,52 @@ kbd {
 .member-row input:nth-child(2) {
   width: 150px;
 }
+.member-settings {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #d7dbe8;
+  border-radius: 10px;
+}
+.member-connection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #626b80;
+  font-size: 14px;
+}
+.member-settings .connection-settings {
+  margin-top: 16px;
+}
+.owner-connection-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f2f4f9;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.owner-connection-summary small {
+  color: #626b80;
+}
+.export-owner-connections ul {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.export-owner-connections li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid #d7dbe8;
+  overflow-wrap: anywhere;
+}
 .resource-editor {
   padding: 17px;
   border: 1px solid #d7dbe8;

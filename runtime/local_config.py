@@ -1,4 +1,4 @@
-"""One shared local coding backend for every role in a workflow."""
+"""Local coding backend selection, including explicit task-owner OpenCode routing."""
 from __future__ import annotations
 
 import json
@@ -14,7 +14,7 @@ DEFAULT_EXECUTION = {
     "model": "",
     "task_timeout_seconds": 1800,
 }
-BACKENDS = ("codex", "claude")
+BACKENDS = ("codex", "claude", "opencode")
 _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@:+-]{0,199}$")
 
 
@@ -31,13 +31,15 @@ def validate_execution(value: Any, *, allow_unselected: bool = False) -> dict:
         raise ValueError("Unsupported local execution settings version")
     backend = config["backend"]
     if backend not in BACKENDS and not (allow_unselected and backend is None):
-        raise ValueError("Choose Codex or Claude once: run python run.py --configure, or pass --backend codex / --backend claude")
+        raise ValueError("Choose a local assistant: run python run.py --configure, or pass --backend codex / --backend claude / --backend opencode")
     model = config["model"]
     if not isinstance(model, str) or (model and (
         not _MODEL.fullmatch(model) or re.match(r"^[A-Za-z]:", model)
         or any(part in (".", "..") for part in model.split("/"))
     )):
         raise ValueError("Model must be an identifier, not a path, command or credential; leave it empty to use the assistant default")
+    if backend == "opencode" and model:
+        raise ValueError("OpenCode uses each task owner's model connection; the shared model must be empty")
     timeout = config["task_timeout_seconds"]
     if type(timeout) is not int or not 1 <= timeout <= 86400:
         raise ValueError("Local task timeout must be an integer from 1 to 86400 seconds")

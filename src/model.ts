@@ -1,6 +1,13 @@
+import type { ModelConnection } from './connections';
+
 export type NodeKind =
   'start' | 'agent_task' | 'shared_resource' | 'parallel' | 'condition' | 'human_review' | 'output';
-export type Member = { id: string; name: string; skills: string };
+export type Member = {
+  id: string;
+  name: string;
+  skills: string;
+  connection?: ModelConnection;
+};
 export type Agent = {
   id: string;
   name: string;
@@ -290,6 +297,21 @@ export function parseWorkflow(value: unknown): Workflow {
   entries(project.members, 'Member').forEach((m) => {
     text(m.name, 'Member name');
     text(m.skills, 'Member skills');
+    if (m.connection !== undefined) {
+      const connection = object(m.connection, 'Member connection');
+      if (
+        Object.keys(connection).some(
+          (key) => !['provider', 'model', 'credential_ref', 'base_url'].includes(key),
+        )
+      )
+        throw Error('Unsupported member connection setting.');
+      if (connection.provider !== 'openai' && connection.provider !== 'anthropic')
+        throw Error('Unsupported member connection provider.');
+      for (const key of ['model', 'credential_ref'])
+        text(connection[key], `Member connection ${key}`);
+      if (connection.base_url !== undefined)
+        text(connection.base_url, 'Member connection base URL');
+    }
   });
   entries(raw.agents, 'Agent').forEach((a) => {
     for (const key of ['name', 'role', 'system_prompt', 'model', 'credential_ref'])
@@ -437,9 +459,10 @@ function apiErrorMessage(payload: unknown, status: number): string {
   const fallback = `Server error (${status})`;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return fallback;
   const error = payload as Record<string, unknown>;
-  const message = [error.error, error.message].find(
-    (value): value is string => typeof value === 'string' && Boolean(value.trim()),
-  ) || fallback;
+  const message =
+    [error.error, error.message].find(
+      (value): value is string => typeof value === 'string' && Boolean(value.trim()),
+    ) || fallback;
   const details: string[] = [];
   const seen = new Set<string>();
   if (Array.isArray(error.issues)) {

@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .security import ENV_RE, ID_RE, contains_secret, relative_path
+from .owner_connections import connection_error, register_owner_secrets
 
 NODE_TYPES = {"start", "agent_task", "shared_resource", "parallel", "condition", "human_review", "output"}
 TOOLS = {"read_text", "read_csv", "summarize_csv", "write_file"}
@@ -50,6 +51,7 @@ def _validate_workflow(workflow: Any, mode: str = "mock") -> list[dict]:
 
     if not isinstance(workflow, dict):
         return [{"severity": "error", "code": "schema", "message": "Workflow must be a JSON object"}]
+    register_owner_secrets(workflow)
     if contains_secret(workflow):
         issue("secret", "Workflow contains a secret or credential literal. Use an environment-variable credential reference only.")
     if workflow.get("schema_version") != "1.0":
@@ -69,6 +71,10 @@ def _validate_workflow(workflow: Any, mode: str = "mock") -> list[dict]:
     for member in members.values():
         if not string(member.get("name")) or not isinstance(member.get("skills", ""), str):
             issue("members", "Members need a name and text skills")
+        if "connection" in member:
+            error = connection_error(member["connection"])
+            if error:
+                issue("member_connection", error)
     agents = identifiers(workflow.get("agents"), "agents")
     nodes = identifiers(workflow.get("nodes"), "nodes")
     resources = identifiers(workflow.get("resources"), "resources")

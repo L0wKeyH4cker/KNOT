@@ -260,9 +260,10 @@ def _snapshot(root: Path, state_path: Path, registration: dict | None, now: floa
                 "type": _text(item.get("type") or definition.get("type"), 60),
                 "agent_name": _text(item.get("agent_name") or agent_names.get(config.get("agent_id"), ""), 160),
                 "status": item.get("status") if item.get("status") in _STATUSES else "unknown"}
-        for key in ("started_at", "finished_at", "last_activity_at", "error", "instructions", "owner_id"):
+        for key in ("started_at", "finished_at", "last_activity_at", "error", "instructions", "owner_id", "owner_name", "model", "provider"):
             if isinstance(item.get(key), str):
-                node[key] = _text(item[key], 600 if key in {"error", "instructions"} else 160)
+                limit = 600 if key in {"error", "instructions"} else 200 if key == "model" else 60 if key == "provider" else 160
+                node[key] = _text(item[key], limit)
         if isinstance(item.get("input_nodes"), list):
             node["input_nodes"] = [_text(n, 160) for n in item["input_nodes"][:MAX_NODES] if isinstance(n, str)]
         activity = _activity(item.get("activity"))

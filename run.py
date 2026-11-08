@@ -13,6 +13,7 @@ from runtime.engine import Engine, WorkflowError, fingerprint
 from runtime.local_config import load_execution, save_execution, validate_execution
 from runtime.security import load_env, redact, safe_path
 from runtime.validation import validate_workflow
+from runtime.owner_connections import validate_owner_connections
 
 
 def check_backend(backend: str) -> dict:
@@ -81,22 +82,24 @@ def run_engine(engine: Engine, mode: str, *, plain: bool = False, tui: bool = Fa
 
 
 def choose_backend(current: str | None) -> str:
-    print("Choose one assistant for every Agent in this workflow:")
-    print("  1. Codex\n  2. Claude")
+    print("Choose how to run the Agents in this workflow:")
+    print("  1. Codex\n  2. Claude\n  3. OpenCode (each task owner's API connection)")
     if current:
         print(f"Current: {current}. Press Enter to keep it.")
     while True:
         try:
-            answer = input("Assistant [1/2]: ").strip().lower()
+            answer = input("Assistant [1/2/3]: ").strip().lower()
         except EOFError as error:
-            raise ValueError("No assistant selected. Pass --backend codex or --backend claude, or open start.bat in a terminal.") from error
+            raise ValueError("No assistant selected. Pass --backend codex, --backend claude or --backend opencode, or open start.bat in a terminal.") from error
         if not answer and current:
             return current
         if answer in ("1", "codex"):
             return "codex"
         if answer in ("2", "claude"):
             return "claude"
-        print("Enter 1 for Codex or 2 for Claude.")
+        if answer in ("3", "opencode"):
+            return "opencode"
+        print("Enter 1 for Codex, 2 for Claude or 3 for OpenCode.")
 
 
 def configure_execution(root: Path, args: argparse.Namespace, can_prompt: bool) -> tuple[dict, bool]:
@@ -111,6 +114,8 @@ def configure_execution(root: Path, args: argparse.Namespace, can_prompt: bool) 
     if args.model is not None:
         config["model"] = args.model
         changed = True
+    elif changed and config["backend"] == "opencode":
+        config["model"] = ""
     return validate_execution(config), changed
 
 
@@ -163,13 +168,13 @@ def ask_review(state: dict, root: Path) -> tuple[str, str, str] | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the canvas workflow with one local Codex or Claude backend")
+    parser = argparse.ArgumentParser(description="Run the canvas workflow with Codex, Claude or owner-configured OpenCode")
     parser.add_argument("--workflow", default="workflow.json", help="Workflow JSON file")
     parser.add_argument("--root", default=".", help="Directory containing knot.json, inputs/, results/ and logs/")
     parser.add_argument("--state", default="logs/run-state.json", help="Relative logs/ state path")
     parser.add_argument("--mode", choices=("local", "mock", "real"), default="local", help="Local coding assistants by default; mock and direct API real are explicit")
-    parser.add_argument("--backend", choices=("codex", "claude"), help="One assistant shared by all roles; saved in knot.json")
-    parser.add_argument("--model", help="One optional model for all roles; empty uses the assistant's configured default")
+    parser.add_argument("--backend", choices=("codex", "claude", "opencode"), help="Local assistant; OpenCode uses each task owner's connection")
+    parser.add_argument("--model", help="Optional shared Codex/Claude model; must be empty for owner-configured OpenCode")
     parser.add_argument("--configure", action="store_true", help="Choose and save the shared assistant without starting a run")
     parser.add_argument("--interactive", action="store_true", help="Show assistant selection and explicit human-review prompts")
     display = parser.add_mutually_exclusive_group()
@@ -206,7 +211,10 @@ def main(argv: list[str] | None = None) -> int:
             execution, changed = configure_execution(root, args, interactive and not args.retry_failed)
         if args.configure:
             save_execution(root, execution)
-            print(f"Saved {execution['backend']} for every Agent in knot.json. Model: {execution['model'] or 'assistant default'}.")
+            if execution["backend"] == "opencode":
+                print("Saved OpenCode in knot.json. Each task uses its owner's model and API credential reference.")
+            else:
+                print(f"Saved {execution['backend']} for every Agent in knot.json. Model: {execution['model'] or 'assistant default'}.")
             print("Run start.bat (Windows), sh start.sh (macOS/Linux), or python run.py to begin.")
             return 0
         workflow_path = Path(args.workflow)
@@ -215,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
         workflow = json.loads(workflow_path.read_text(encoding="utf-8-sig"))
         if args.validate:
             issues = validate_workflow(workflow, args.mode)
+            if execution and execution["backend"] == "opencode":
+                issues.extend(validate_owner_connections(workflow, require_credentials=True))
             availability = None
             if execution:
                 availability = check_backend(execution["backend"])
@@ -225,7 +235,10 @@ def main(argv: list[str] | None = None) -> int:
         if changed and not args.retry_failed:
             save_execution(root, execution)
         if execution:
-            print(f"Using {execution['backend']} for all Agents; model: {execution['model'] or 'assistant default'}.")
+            if execution["backend"] == "opencode":
+                print("Using OpenCode with each task owner's model and API connection.")
+            else:
+                print(f"Using {execution['backend']} for all Agents; model: {execution['model'] or 'assistant default'}.")
             print("Each task has its own workspace. Independent tasks run in parallel according to the canvas.")
         state_path = safe_path(root, args.state, ("logs",))
         saved = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else None

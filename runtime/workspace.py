@@ -264,6 +264,11 @@ class LocalWorkspace:
 def task_prompt(workflow: dict, node: dict, agent: dict) -> str:
     """Only project data and the assigned role, never developer machine settings."""
     from .coding import COMPLETION_CRITERIA
+    project = {key: value for key, value in workflow["project"].items() if key != "members"}
+    project["members"] = [
+        {key: member[key] for key in ("id", "name", "skills") if key in member}
+        for member in workflow["project"]["members"]
+    ]
     return """You are a coding worker in a KNOT workflow running on the user's computer.
 Perform the assigned task by actually reading/writing project files and running suitable checks.
 KNOT schedules all other workers. Do not spawn subagents or perform downstream tasks.
@@ -282,4 +287,4 @@ For CSV output, data must be an array of row objects. For JSON output, data must
 Generated source files are the primary project output and are collected separately from this report.
 Use status completed only for work you actually completed. A report alone does not complete a coding task.
 
-""" + COMPLETION_CRITERIA + "\nAssigned work:\n" + json.dumps({"project": workflow["project"], "role": {"name": agent["name"], "role": agent["role"], "instructions": agent["system_prompt"]}, "task": {"id": node["id"], "label": node["label"], "instructions": node["config"]["instructions"], "acceptance": node["config"]["acceptance"], "output_format": node["config"]["output_format"]}}, ensure_ascii=False)
+""" + COMPLETION_CRITERIA + "\nAssigned work:\n" + json.dumps({"project": project, "role": {"name": agent["name"], "role": agent["role"], "instructions": agent["system_prompt"]}, "task": {"id": node["id"], "label": node["label"], "instructions": node["config"]["instructions"], "acceptance": node["config"]["acceptance"], "output_format": node["config"]["output_format"]}}, ensure_ascii=False)

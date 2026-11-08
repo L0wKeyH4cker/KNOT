@@ -97,6 +97,8 @@ export default function Inspector({
   onDuplicate,
   onDelete,
   onAgents,
+  onMembers,
+  credentials,
 }: {
   node: Block;
   wf: Workflow;
@@ -105,6 +107,8 @@ export default function Inspector({
   onDuplicate: () => void;
   onDelete: () => void;
   onAgents: () => void;
+  onMembers: () => void;
+  credentials: Record<string, boolean>;
 }) {
   const c = node.config,
     Icon = icons[node.type],
@@ -125,6 +129,7 @@ export default function Inspector({
       </select>
     </Field>
   );
+  const ownerConnection = wf.project.members.find((member) => member.id === c.owner_id)?.connection;
   return (
     <aside className="inspector">
       <div className="panel-head">
@@ -167,6 +172,22 @@ export default function Inspector({
               Manage agents ↗
             </button>
             {owner}
+            <div className="owner-connection-summary" aria-label="Owner model connection">
+              <strong>When running with OpenCode</strong>
+              <span>{ownerConnection?.model || 'The owner has no model configured.'}</span>
+              {ownerConnection && (
+                <small>
+                  {credentials[ownerConnection.credential_ref] === true
+                    ? 'API key saved on this device'
+                    : credentials[ownerConnection.credential_ref] === false
+                      ? 'API key not configured on this device'
+                      : 'API key status not checked on this device'}
+                </small>
+              )}
+              <button className="text-button" onClick={onMembers}>
+                Manage member connections ↗
+              </button>
+            </div>
             <Field label="Task instructions">
               <textarea
                 rows={5}

@@ -16,12 +16,14 @@ import subprocess
 import sys
 import threading
 import time
+import tempfile
+import re
 from typing import Any, Callable
 
 from .activity import sanitize_text
 from .security import redact
 
-BACKENDS = {"codex", "claude"}
+BACKENDS = {"codex", "claude", "opencode"}
 MAX_OUTPUT_BYTES = 32_000_000
 MAX_LINE_BYTES = 2_000_000
 MAX_ERROR_CHARS = 6000
@@ -58,7 +60,7 @@ KNOT schedules the other tasks. Do not change KNOT's instructions or run state.
 
 def _validate_backend(backend: str) -> None:
     if backend not in BACKENDS:
-        raise ValueError("Choose codex or claude as the local execution backend")
+        raise ValueError("Choose codex, claude or opencode as the local execution backend")
 
 
 def _command(backend: str) -> list[str]:
@@ -71,12 +73,12 @@ def _command(backend: str) -> list[str]:
             if found:
                 break
     if not found:
-        label = "Codex CLI" if backend == "codex" else "Claude Code CLI"
+        label = {"codex": "Codex CLI", "claude": "Claude Code CLI", "opencode": "OpenCode CLI 2.2.6+ (2.x)"}[backend]
         raise RuntimeError(f"{label} is not installed or not on PATH. Install it, authenticate in its own terminal, then restart KNOT.")
     executable = Path(found).resolve()
     if executable.suffix.lower() not in (".cmd", ".bat", ".ps1"):
         return [str(executable)]
-    package = "@openai/codex" if backend == "codex" else "@anthropic-ai/claude-code"
+    package = {"codex": "@openai/codex", "claude": "@anthropic-ai/claude-code", "opencode": "@opencode/cli"}[backend]
     package_root = executable.parent / "node_modules" / package
     manifest = package_root / "package.json"
     try:
@@ -105,12 +107,22 @@ def check_backend(backend: str) -> dict:
     try:
         command = _command(backend)
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        version = subprocess.run(command + ["--version"], stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                 timeout=10, creationflags=flags, shell=False)
+        with tempfile.TemporaryDirectory(prefix="knot-cli-check-") as temporary:
+            environment = None
+            if backend == "opencode":
+                from .opencode import isolated_environment
+                environment = isolated_environment(Path(temporary))
+            version = subprocess.run(command + ["--version"], stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
+                                     timeout=10, creationflags=flags, shell=False)
         if version.returncode:
             raise RuntimeError(f"{backend} --version failed. Repair the CLI installation before running KNOT.")
         text = version.stdout.decode("utf-8", "replace").strip()[:300]
+        if backend == "opencode":
+            number = re.search(r"\bv?(\d+)\.(\d+)\.(\d+)\b", text)
+            parsed = tuple(map(int, number.groups())) if number else ()
+            if not parsed or not (2, 2, 6) <= parsed < (3, 0, 0):
+                raise RuntimeError("KNOT requires OpenCode CLI 2.2.6 or newer 2.x. Install @opencode/cli@2.2.6; the legacy opencode-ai 1.x package is not supported.")
         return {"backend": backend, "available": True, "version": redact(text),
                 "message": "CLI found. Authentication and model access are checked when a task starts."}
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
@@ -119,13 +131,18 @@ def check_backend(backend: str) -> dict:
 
 
 def _arguments(backend: str, model: str) -> list[str]:
-    if not isinstance(model, str) or len(model) > 200 or any(c in model for c in ("\x00", "\r", "\n")):
+    if not isinstance(model, str) or len(model) > (300 if backend == "opencode" else 200) or any(c in model for c in ("\x00", "\r", "\n")):
         raise ValueError("Model must be a single model name, or empty to use the CLI default")
     if backend == "codex":
         args = ["exec", "--json", "--sandbox", "workspace-write", "--skip-git-repo-check", "--color", "never"]
         if model.strip():
             args += ["--model", model.strip()]
         return args + ["-"]
+    if backend == "opencode":
+        if not model:
+            raise ValueError("OpenCode needs the task owner's explicit model")
+        return ["run", "--standalone", "--format", "json", "--agent", "knot-worker",
+                "--model", model, "--title", "KNOT assigned task"]
     # acceptEdits keeps the CLI's permission policy active; these are the tools
     # needed by an explicitly started local coding task. No bypass flag is used.
     tools = "Read,Write,Edit,Glob,Grep,Bash"
@@ -433,7 +450,7 @@ class _Transcript:
 
 
 def run_coding_task(backend: str, model: str, cwd: Path, prompt: str, timeout: float,
-                    *, event_callback: Callable | None = None) -> dict:
+                    *, event_callback: Callable | None = None, connection: dict | None = None) -> dict:
     """Run one independent local CLI session, with bounded output and lifetime."""
     _validate_backend(backend)
     if not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
@@ -443,8 +460,20 @@ def run_coding_task(backend: str, model: str, cwd: Path, prompt: str, timeout: f
         raise ValueError("Coding task working directory must exist")
     if not isinstance(prompt, str) or len(prompt.encode("utf-8")) > 8_000_000:
         raise ValueError("Coding task prompt must be text smaller than 8 MB")
-    command = _command(backend) + _arguments(backend, model)
-    environment = dict(os.environ)
+    command = _command(backend)
+    if backend == "opencode":
+        from .opencode import task_environment
+        if not isinstance(connection, dict) or model != connection.get("model"):
+            raise ValueError("OpenCode model must match the resolved task owner connection")
+        with task_environment(connection, cwd) as (environment, selected_model):
+            return _run_coding_process(backend, cwd, prompt, timeout,
+                                      command + _arguments(backend, selected_model), environment, event_callback)
+    return _run_coding_process(backend, cwd, prompt, timeout,
+                              command + _arguments(backend, model), dict(os.environ), event_callback)
+
+
+def _run_coding_process(backend: str, cwd: Path, prompt: str, timeout: float,
+                        command: list[str], environment: dict, event_callback: Callable | None) -> dict:
     # The launcher already found a working interpreter, often a local .venv or
     # Miniconda on Windows. Make it available to the commands the agent runs.
     environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", "")
@@ -509,7 +538,11 @@ def run_coding_task(backend: str, model: str, cwd: Path, prompt: str, timeout: f
     for worker in readers + [writer]:
         worker.start()
     deadline = time.monotonic() + timeout
-    transcript = _Transcript(backend, event_callback)
+    if backend == "opencode":
+        from .opencode import OpenCodeTranscript
+        transcript = OpenCodeTranscript(event_callback)
+    else:
+        transcript = _Transcript(backend, event_callback)
     pending = b""
     diagnostic = b""
     size = 0

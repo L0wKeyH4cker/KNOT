@@ -15,6 +15,8 @@ from backend.connections import credential_status, save_credential, test_connect
 from backend.planner import PlanningError, hosted_planners, plan_workflow
 from backend.template import load_template
 from runtime.validation import validate_workflow
+from runtime.local_config import validate_execution
+from runtime.owner_connections import validate_owner_connections
 from runtime.security import redact
 
 ROOT = Path(__file__).resolve().parent
@@ -140,7 +142,12 @@ class Handler(BaseHTTPRequestHandler):
                     mode = body.get("mode", "mock")
                     if mode not in ("mock", "real", "local"):
                         raise ValueError("运行模式只能是 local、mock 或 real。")
-                    self.send_json(200, {"issues": validate_workflow(workflow, mode=mode)})
+                    issues = validate_workflow(workflow, mode=mode)
+                    if mode == "local" and body.get("execution") is not None:
+                        execution = validate_execution(body["execution"], allow_unselected=True)
+                        if execution["backend"] == "opencode":
+                            issues.extend(validate_owner_connections(workflow, require_credentials=False))
+                    self.send_json(200, {"issues": issues})
                 else:
                     self.send_bytes(200, build_bundle(workflow, body.get("execution")), "application/zip", {"Content-Disposition": 'attachment; filename="knot-workflow.zip"'})
             elif path == "/api/plan":

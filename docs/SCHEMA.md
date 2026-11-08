@@ -15,6 +15,14 @@
 
 任务用 `agent_id` 引用 Agent，用 `owner_id` 引用成员。同一 Agent 可以承担多个任务，同一成员可以负责多个 Agent 的任务。
 
+## OpenCode 的成员连接
+
+成员可以包含可选 `connection` 对象：`provider`（`openai` 兼容协议或 `anthropic`）、`model`、`credential_ref` 和可选 `base_url`。旧工作流不需要增加该字段。`credential_ref` 始终是本机环境变量名称，不是 key 值。
+
+导出执行配置 `knot.json` 中的 `backend: "opencode"` 表示按任务 `owner_id` 选择成员连接，此时共享 `model` 必须为空。任务仍使用 `agent_id` 对应的角色与提示词；Agent 上的旧 API 配置不覆盖成员连接。所有编码任务必须有完整的负责人连接，启动时还会检查凭据是否存在。仅负责人工审核的成员不需要 API 连接。
+
+OpenCode 走 `local` 编码路径，沿用独立工作副本、显式数据交接、审核与失败重试。运行记录只保存成员、模型与凭据引用等连接信息，恢复时核对配置；不保存真实 key。`codex` / `claude` 仍使用 `knot.json` 的共享模型，`--mode real` 仍使用逐 Agent 直接 API 配置。
+
 ## 两种连线
 
 `control` 连线决定执行顺序，不自动授予读取上游内容的权限。普通端口为 `out → in`，Condition 的输出端口为 `true` 和 `false`。
@@ -50,6 +58,6 @@ Agent Task 可配置具体要求、验收要求、输出类型、工具和读写
 
 工具为 `read_text`、`read_csv`、`summarize_csv`、`write_file`。运行时会同时检查 Agent 工具许可、任务工具许可和任务路径许可。读取只限 `inputs/` 和 `results/`，写入只限 `results/`，并校验实际解析路径，拒绝 `..`、绝对路径和符号链接绕过。
 
-`credential_ref` 是环境变量名称，真实 key 不属于工作流格式。人工负责人字段只表达协作归属，不能代替文件权限或 API 凭证。
+`credential_ref` 是环境变量名称，真实 key 不属于工作流格式。OpenCode 模式按负责人选择预先配置的成员连接；负责人字段本身不能代替文件权限、提供密钥或验证远程人员身份。
 
 完整字段约定见根目录 `CONTRACT.md`；实际可接受结构以 `runtime/validation.py` 的校验为准。

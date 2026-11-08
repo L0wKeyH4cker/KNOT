@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Copy, Terminal } from 'lucide-react';
 
-export default function ExportRunGuide() {
+export default function ExportRunGuide({ backend }: { backend?: 'codex' | 'claude' | 'opencode' }) {
   const [platform, setPlatform] = useState<'windows' | 'unix'>(() =>
     /Win/i.test(navigator.platform) ? 'windows' : 'unix',
   );
@@ -72,6 +72,12 @@ export default function ExportRunGuide() {
                 : 'Extract all files. Open Terminal, type cd followed by a space, drag the extracted folder into the window, then press Enter.'}
             </p>
             <p>Use the folder containing knot.py. Add any starting project code to workspace/.</p>
+            {backend === 'opencode' && (
+              <p>
+                Copy .env.example to .env and fill in each member's API key before starting. Keep
+                .env on this computer.
+              </p>
+            )}
           </div>
         </li>
         <li>
@@ -104,9 +110,11 @@ export default function ExportRunGuide() {
         the running terminal stops its agents.
       </p>
       <p className="export-guide-help">
-        Needs Python 3.10+ and your selected assistant installed and signed in. If you use Conda,
-        activate your Python environment before running these commands. Full instructions are in
-        README.md and START-HERE.md inside the ZIP.
+        {backend === 'opencode'
+          ? 'Needs Python 3.10+ and OpenCode installed, with member API keys configured in .env. '
+          : 'Needs Python 3.10+ and your selected assistant installed and signed in. '}
+        If you use Conda, activate your Python environment before running these commands. Full
+        instructions are in README.md and START-HERE.md inside the ZIP.
       </p>
       <p className="export-copy-feedback" role="status" aria-live="polite">
         {feedback}

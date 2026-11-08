@@ -119,6 +119,22 @@ def _activity(node: dict) -> str:
     return sanitize_text(activity, limit=1000)
 
 
+def _owner_model_lines(node: dict) -> list[str]:
+    """Show only selected routing labels, never raw connections or credentials."""
+    owner = node.get("owner_name") or node.get("owner_id")
+    model = node.get("model")
+    provider = node.get("provider")
+    lines = []
+    if isinstance(owner, str) and owner:
+        lines.append("Owner: " + sanitize_text(owner, limit=160))
+    if isinstance(model, str) and model:
+        label = sanitize_text(model, limit=200)
+        if isinstance(provider, str) and provider:
+            label = sanitize_text(provider, limit=60) + " / " + label
+        lines.append("Model: " + label)
+    return lines
+
+
 def _event_text(event: dict, nodes: dict) -> str:
     node = nodes.get(event.get("node_id"), {})
     label = event.get("label") or (node.get("label") if isinstance(node, dict) else None) or event.get("node_id") or "Workflow"
@@ -191,7 +207,7 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
     run_status = _run_status(run)
     execution = run.get("execution") if isinstance(run.get("execution"), dict) else {}
     backend = sanitize_text(execution.get("backend") or run.get("mode") or "unknown")
-    model = sanitize_text(execution.get("model") or "assistant default")
+    model = sanitize_text(execution.get("model") or ("per-owner models" if backend == "opencode" else "assistant default"))
     end = run.get("updated_at") if run_status not in ("running", "pending") else None
     task_count = f"{done}/{len(tasks)} agent tasks done" + (f" | {skipped} skipped" if skipped else "")
     project_word = "project" if len(runs) == 1 else "projects"
@@ -209,8 +225,9 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
             nid, node = tasks[selected_task]
             status = "disconnected" if run_status == "disconnected" and node.get("status") == "running" else sanitize_text(node.get("status", "pending"))
             lines.extend([f"> {selected_task + 1}. {sanitize_text(node.get('label') or nid)}",
-                          f"{STATUS.get(status, status.upper())} | {sanitize_text(node.get('agent_name') or 'Agent')}",
-                          _activity(node) or sanitize_text(node.get("error") or "No task activity received yet.")])
+                          f"{STATUS.get(status, status.upper())} | {sanitize_text(node.get('agent_name') or 'Agent')}"])
+            lines.extend(_owner_model_lines(node))
+            lines.append(_activity(node) or sanitize_text(node.get("error") or "No task activity received yet."))
         if run_status == "disconnected":
             lines.append("Runner heartbeat missing; last saved state shown.")
         elif run_status == "waiting_review":
@@ -234,7 +251,8 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
     elif run_status == "waiting_review":
         lines.append("REVIEW NEEDED: approve or reject in the runner terminal. This monitor is read-only.")
     lines.extend(["", "AGENT TASKS"])
-    task_slots = min(max(1, height - len(lines) - 7), 7, len(tasks))
+    route_lines = _owner_model_lines(tasks[selected_task][1]) if tasks else []
+    task_slots = min(max(1, height - len(lines) - 7 - len(route_lines)), 7, len(tasks))
     if not tasks:
         lines.append("  No agent-task metadata in this run. See the recent workflow events below.")
     else:
@@ -255,6 +273,7 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
         last = _timestamp(node.get("last_activity_at"))
         age = f" | last activity {_duration(now - last)} ago" if last is not None else ""
         lines.extend(["", f"SELECTED: {sanitize_text(node.get('label') or nid)}{age}"])
+        lines.extend(route_lines)
         if node.get("error"):
             lines.append("Error: " + sanitize_text(node["error"], limit=1000))
         lines.append(activity or "No task activity received yet. Waiting for the next CLI event.")

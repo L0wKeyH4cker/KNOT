@@ -3,7 +3,8 @@ import { Plus, Trash2, Bot, ShieldCheck, Users, FolderOpen, ArrowUpRight } from 
 import ConnectionSettings from './ConnectionSettings';
 import { Field, CheckList } from './Inspector';
 import { newAgent, TOOLS, uid } from './model';
-import type { Workflow, Agent, Resource } from './model';
+import { newMemberConnection } from './owner-connections';
+import type { Workflow, Agent, Member, Resource } from './model';
 export function AgentsSettings({
   wf,
   change,
@@ -82,6 +83,10 @@ export function AgentsSettings({
                 onChange={(e) => update({ system_prompt: e.target.value })}
               />
             </Field>
+            <p className="muted">
+              OpenCode uses the task owner's connection in Project settings → Team members. The
+              connection below is used by direct API mode.
+            </p>
             <ConnectionSettings
               key={a.id}
               connection={a}
@@ -112,7 +117,28 @@ export function AgentsSettings({
     </div>
   );
 }
-export function ProjectSettings({ wf, change }: { wf: Workflow; change: (w: Workflow) => void }) {
+export function ProjectSettings({
+  wf,
+  change,
+  credentials,
+  onCredentialsChange,
+}: {
+  wf: Workflow;
+  change: (w: Workflow) => void;
+  credentials: Record<string, boolean>;
+  onCredentialsChange: (credentials: Record<string, boolean>) => void;
+}) {
+  const [activeMember, setActiveMember] = useState('');
+  const updateMember = (id: string, patch: Partial<Member>) =>
+    change({
+      ...wf,
+      project: {
+        ...wf.project,
+        members: wf.project.members.map((member) =>
+          member.id === id ? { ...member, ...patch } : member,
+        ),
+      },
+    });
   const updateResource = (id: string, p: Partial<Resource>) =>
     change({ ...wf, resources: wf.resources.map((r) => (r.id === id ? { ...r, ...p } : r)) });
   return (
@@ -144,57 +170,88 @@ export function ProjectSettings({ wf, change }: { wf: Workflow; change: (w: Work
         <Users size={16} />
         Team members
       </div>
+      <p className="muted">
+        Choose OpenCode when exporting to run each task with its owner's model and API key. Keys
+        saved here stay on this device; set them up again in the extracted work package.
+      </p>
       {wf.project.members.map((m, i) => (
-        <div className="member-row" key={m.id}>
-          <span className={`avatar avatar-${i % 4}`}>{m.name.slice(0, 1)}</span>
-          <input
-            aria-label={`Member ${i + 1} name`}
-            value={m.name}
-            onChange={(e) =>
-              change({
-                ...wf,
-                project: {
-                  ...wf.project,
-                  members: wf.project.members.map((x) =>
-                    x.id === m.id ? { ...x, name: e.target.value } : x,
-                  ),
-                },
-              })
-            }
-          />
-          <input
-            aria-label={`Member ${i + 1} skills`}
-            placeholder="Skills (optional)"
-            value={m.skills}
-            onChange={(e) =>
-              change({
-                ...wf,
-                project: {
-                  ...wf.project,
-                  members: wf.project.members.map((x) =>
-                    x.id === m.id ? { ...x, skills: e.target.value } : x,
-                  ),
-                },
-              })
-            }
-          />
-          <button
-            className="icon-button danger"
-            title="Remove member"
-            disabled={wf.project.members.length === 1}
-            onClick={() =>
-              change({
-                ...wf,
-                project: {
-                  ...wf.project,
-                  members: wf.project.members.filter((x) => x.id !== m.id),
-                },
-              })
-            }
-          >
-            <Trash2 size={15} />
-          </button>
-        </div>
+        <article className="member-settings" key={m.id} aria-label={`Member ${i + 1} settings`}>
+          <div className="member-row">
+            <span className={`avatar avatar-${i % 4}`}>{m.name.slice(0, 1)}</span>
+            <input
+              aria-label={`Member ${i + 1} name`}
+              value={m.name}
+              onChange={(e) =>
+                change({
+                  ...wf,
+                  project: {
+                    ...wf.project,
+                    members: wf.project.members.map((x) =>
+                      x.id === m.id ? { ...x, name: e.target.value } : x,
+                    ),
+                  },
+                })
+              }
+            />
+            <input
+              aria-label={`Member ${i + 1} skills`}
+              placeholder="Skills (optional)"
+              value={m.skills}
+              onChange={(e) =>
+                change({
+                  ...wf,
+                  project: {
+                    ...wf.project,
+                    members: wf.project.members.map((x) =>
+                      x.id === m.id ? { ...x, skills: e.target.value } : x,
+                    ),
+                  },
+                })
+              }
+            />
+            <button
+              className="icon-button danger"
+              title="Remove member"
+              disabled={wf.project.members.length === 1}
+              onClick={() =>
+                change({
+                  ...wf,
+                  project: {
+                    ...wf.project,
+                    members: wf.project.members.filter((x) => x.id !== m.id),
+                  },
+                })
+              }
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+          <div className="member-connection-summary">
+            <span>{m.connection?.model || 'No OpenCode model configured'}</span>
+            <button
+              className="text-button"
+              aria-label={`Configure connection for ${m.name}`}
+              aria-expanded={activeMember === m.id}
+              onClick={() => {
+                if (!m.connection)
+                  updateMember(m.id, { connection: newMemberConnection(wf.project.id, m.id) });
+                setActiveMember(activeMember === m.id ? '' : m.id);
+              }}
+            >
+              {activeMember === m.id ? 'Hide connection' : 'Configure connection'}
+            </button>
+          </div>
+          {activeMember === m.id && m.connection && (
+            <ConnectionSettings
+              key={m.id}
+              connection={m.connection}
+              onChange={(connection) => updateMember(m.id, { connection })}
+              credentials={credentials}
+              onCredentialsChange={onCredentialsChange}
+              memberConnection
+            />
+          )}
+        </article>
       ))}
       <button
         className="text-button"

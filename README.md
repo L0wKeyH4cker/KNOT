@@ -2,15 +2,15 @@
 
 <img src="public/brand/KNOT-logo.png" alt="KNOT" width="220" />
 
-在自由画布上设计小组 AI 工作流，下载可调用本地 Codex 或 Claude 的项目工作包。选一次运行方式，所有 Agent 按画板分工，在自己的电脑上写代码、执行任务并交接成果。同一种模型也可以承担多个独立角色。
+在自由画布上设计小组 AI 工作流，下载可调用本地 Codex、Claude 或 OpenCode 的项目工作包。所有 Agent 按画板分工，在一台电脑上写代码、执行任务并交接成果。Codex/Claude 使用共享连接；OpenCode 按任务负责人使用各自的 API key 和模型。
 
 升级到 KNOT 后，浏览器内旧版保存的项目和项目库会自动迁移，已有的新存档不会被覆盖。
 
 ## 下载并运行本地 Agent 工作包
 
 1. 在画板上确认任务和连接，点击 **Export runner**。
-2. 在 **Run with** 选择 **Codex** 或 **Claude**。共享模型可以留空，使用本地 CLI 的默认模型；无需为每个角色填写模型或密钥。
-3. 点击 **Download agent workspace**，解压到新目录。用户电脑需要 Python 3.10+，以及已安装、完成认证的对应 CLI：[Codex 安装说明](https://developers.openai.com/codex/cli/)、[Claude Code 安装说明](https://code.claude.com/docs/en/setup)。
+2. 在 **Run with** 选择 **Codex**、**Claude** 或 **OpenCode**。Codex/Claude 的共享模型可以留空。选择 OpenCode 时，先为团队成员配置连接，并为每个任务指定负责人，模型与密钥跟随负责人。
+3. 点击 **Download agent workspace**，解压到新目录。用户电脑需要 Python 3.10+ 和对应 CLI：[Codex 安装说明](https://developers.openai.com/codex/cli/)、[Claude Code 安装说明](https://code.claude.com/docs/en/setup)、[OpenCode CLI](https://opencode.ai/docs/cli/)。Codex/Claude 使用本机登录；OpenCode 需在运行包的 `.env` 或进程环境中提供成员凭据。
 4. 如有初始项目代码，放入 `workspace/`；按包内 **Inputs you must provide** 补齐资料。接下来按操作系统启动任务。
 
 ### Windows：启动任务
@@ -30,7 +30,17 @@ cd "/path/to/extracted-folder"
 sh knot.sh run --interactive
 ```
 
-**运行一次就会自动派发画板上的任务。** 启动器读取导出时保存的 Codex/Claude 选择，为每个 Agent 建立独立任务上下文；能并行的任务同时执行，依赖其他任务的工作会等待结果。不需要逐个打开 Agent 或复制任务说明。没有预先选择的包会询问一次并记住选择。
+**运行一次就会自动派发画板上的任务。** 启动器读取导出时保存的运行方式，为每个 Agent 建立独立任务上下文；能并行的任务同时执行，依赖其他任务的工作会等待结果。不需要逐个打开 Agent 或复制任务说明。没有预先选择的包会询问一次并记住选择。
+
+### OpenCode：按负责人使用连接
+
+在项目的团队成员设置中，为每位负责人填写服务商、模型和成员专属凭据引用；任务的 **Human owner** 决定使用哪个连接，Agent 的角色与提示词决定如何工作。同一服务商的两位成员也应使用不同引用，避免覆盖彼此的 key。
+
+运行电脑需安装 OpenCode CLI **2.2.6 或以上的 2.x 版本**。已有 npm 时可运行 `npm install -g @opencode/cli@2.2.6`。KNOT 为每项任务启动 `--standalone` 独立实例，使用任务专属的临时配置，结束后清理；不会复用 OpenCode 默认共享后台中的账号。
+
+导出时选择 **OpenCode**。ZIP 保留成员连接配置，只包含空白 `.env.example`，不包含在编辑器中保存的真实 key。解压后将 `.env.example` 复制为 `.env`，为其中的成员引用填写已获授权的 key，或使用同名环境变量；然后执行 `.\knot.cmd run --validate`（macOS/Linux：`sh knot.sh run --validate`）检查，再按上文启动任务。连接缺失会明确停止，不会换用其他成员或本机全局登录的账号。`--validate` 不调用线上模型，因此不代表模型权限或配额已经验证。
+
+所有任务仍在这一台电脑上运行。把同一个 ZIP 发到多台电脑分别启动，会产生独立运行，不会自动组成远程团队。KNOT 负责依赖、并行、结果交接和人工审核，OpenCode 负责单个任务里的代码编辑与命令执行。负责人连接的服务商、模型和凭据引用随运行记录保存；恢复与失败重试必须沿用原任务配置，密钥值不写入记录。
 
 运行窗口会显示实时看板。**任务执行期间保持这个窗口打开**；打开监控窗口后也不要关闭它。Windows 也可以双击 `start.bat`，macOS/Linux 可以运行 `sh start.sh`，同样会启动任务。
 
@@ -69,7 +79,7 @@ Output 节点将项目文件交付到 `results/project/`，画板配置的报告
 
 ### 调整运行方式与监控说明
 
-更换统一执行方式、只检查配置或改用滚动日志：
+更换执行方式、只检查配置或改用滚动日志：
 
 | 操作 | Windows PowerShell | macOS / Linux |
 | --- | --- | --- |
@@ -83,7 +93,7 @@ Output 节点将项目文件交付到 `results/project/`，画板配置的报告
 
 运行发现只在本机保存目录指针和心跳：Windows 位于 `%LOCALAPPDATA%/KNOT/runs`，macOS/Linux 位于 `$XDG_STATE_HOME/knot/runs`（默认 `~/.local/state/knot/runs`），可用 `KNOT_RUNS_DIR` 改位置。不扫描全盘、不上传日志；进度摘要不含任务提示词、结果正文、命令输出和模型私有推理，并过滤凭据及终端控制符。
 
-`knot.json` 保存统一执行配置，`workflow.json` 保留原画板；`tasks/` 和 `prompts/` 是可读的任务说明，`AGENTS.md` / `CLAUDE.md` 方便编程助手接手。任务各自拥有工作副本，独立任务按画板并发上限执行。执行连线只控制先后，数据连线才传递上游结果和代码改动。文件冲突会明确停止相关任务，不会自动覆盖。
+`knot.json` 保存执行方式，`workflow.json` 保留原画板及成员连接；`tasks/` 和 `prompts/` 是可读的任务说明，`AGENTS.md` / `CLAUDE.md` 方便编程助手接手。任务各自拥有工作副本，独立任务按画板并发上限执行。执行连线只控制先后，数据连线才传递上游结果和代码改动。文件冲突会明确停止相关任务，不会自动覆盖。
 
 源码交接限制为单文件 16 MiB、总计 128 MiB、最多 5,000 个文件；不适合把大型数据集、权重或依赖目录作为源码交接。
 
@@ -185,7 +195,7 @@ python run.py --mode mock --resume --review review --decision approve --reviewer
 
 开发后端启动时优先读取 `.env.local`，其次 `.env`，不覆盖已存在的进程环境变量。在设置页显式保存的新 key 会更新当前后端进程和 `.env.local`，无需重启。规划模型的非敏感连接设置保存在当前浏览器中。下载的运行包使用自己的 `.env`，凭证需在运行包所在电脑另外配置。
 
-- **local**（默认）：调用用户电脑上的 Codex/Claude，所有任务继承统一选择，各自维护任务上下文和工作副本。
+- **local**（默认）：调用用户电脑上的编程工具。Codex/Claude 使用共享连接；OpenCode 按任务负责人选择成员模型与凭据。各任务维护独立上下文和工作副本。
 - **mock**（显式选择）：固定示例结果，验证调度、条件、权限和人工审核，不调用收费 API。
 - **real**：调用真实 API。缺少模型、凭证或 API 调用失败时明确报错，不会切换到 mock。
 
@@ -264,7 +274,7 @@ Windows 会自动使用默认安装目录中的 Google Chrome。其它环境或�
 
 合并后的版本已完成生产构建、**239 项 Python 验收（237 通过、2 个 Windows 符号链接权限相关用例跳过）**、**35 项前端数据测试**和 **66 项浏览器交互测试**。前端数据测试包含旧版项目迁移、连接预设、引导状态、独立项目存储和写入失败后的数据保留。浏览器测试包括真实 PDF 上传与文字提取、任务清单编辑、生成后保存、JSON/ZIP 导出、多 Agent 独立模型配置、凭证设置、首次访问引导、项目删除确认、独立标签页、损坏项目库恢复、刷新保存和 Check 返回画板，新增共享工作台侧栏切换、画布状态保留及图标悬停/键盘提示检查，也保留了实际拖拽、连线、导出教程复制及下载包独立运行的验证。离开生成页后，旧请求的延迟结果不会覆盖后来打开的项目。浏览器中的模型响应使用明确的测试数据，真实 API 验证单独记录。各轮结果和跳过项见 [验证记录](docs/VERIFICATION.md)。运行 `npm run test:browser` 会在本地 `artifacts/browser/` 生成需求上传、任务确认、桌面画布和小屏画布截图；这些文件不随仓库发布。
 
-MVP 限定为单机、无环工作流。本地模式调用 Codex/Claude 提供编程与命令工具；直接 API 模式仍只支持读取文本/CSV、基础 CSV 汇总、写入 Markdown/JSON/CSV，不提供 shell 或代码执行。负责人成员信息不会授予凭证或文件访问权限。
+MVP 限定为单机、无环工作流。本地模式调用 Codex/Claude/OpenCode 提供编程与命令工具；直接 API 模式仍只支持读取文本/CSV、基础 CSV 汇总、写入 Markdown/JSON/CSV，不提供 shell 或代码执行。OpenCode 按负责人选择已配置的连接，负责人姓名本身不会提供凭证或授予文件访问权限。
 
 前端保存采用浏览器本地存储；不是多人实时协作系统。执行器只在 API 返回实际用量时记录 token，不估造账单。人工审核是本地操作确认，未实现企业身份认证。
 

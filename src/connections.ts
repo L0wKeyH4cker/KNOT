@@ -51,7 +51,16 @@ export function connectionPreset(connection: ModelConnection): ConnectionPreset 
     : 'custom';
 }
 
-export function presetConnection(preset: ConnectionPreset): ModelConnection & { base_url: string } {
+export function presetConnection(
+  preset: ConnectionPreset,
+  credentialRef?: string,
+): ModelConnection & { base_url: string } {
   const { label: _label, ...connection } = CONNECTION_PRESETS[preset];
-  return connection;
+  return credentialRef
+    ? {
+        ...connection,
+        credential_ref: credentialRef,
+        base_url: preset === 'openai' ? 'https://api.openai.com/v1' : connection.base_url,
+      }
+    : connection;
 }

@@ -52,6 +52,7 @@ import { usePage } from './navigation';
 import BlockNode, { icons } from './BlockNode';
 import Inspector, { Field } from './Inspector';
 import { AgentsSettings, ProjectSettings } from './Settings';
+import { ownerConnectionIssues } from './owner-connections';
 import RequirementIntake from './RequirementIntake';
 import { KNOT_STORAGE, KNOT_LIBRARY, migrateLegacyStorage } from './storage';
 import {
@@ -202,7 +203,7 @@ export default function App() {
   );
   const [plannerReady, setPlannerReady] = useState(() => !!readPlanner());
   const [execution, setExecution] = useState({
-    backend: 'codex' as 'codex' | 'claude',
+    backend: 'codex' as 'codex' | 'claude' | 'opencode',
     model: '',
   });
   const [exportDownloaded, setExportDownloaded] = useState(false);
@@ -732,6 +733,7 @@ export default function App() {
       const { issues } = await api<{ issues: Issue[] }>('validate', {
         workflow: candidate,
         mode: 'local',
+        execution,
       });
       if (request !== validationRequest.current) return;
       setIssues(issues.filter((issue) => issue.code !== 'model'));
@@ -740,6 +742,7 @@ export default function App() {
       if (request !== validationRequest.current) return;
       setIssues([
         ...localIssues(candidate).filter((issue) => issue.code !== 'model'),
+        ...(execution.backend === 'opencode' ? ownerConnectionIssues(candidate) : []),
         {
           severity: 'error',
           code: 'backend',
@@ -778,9 +781,22 @@ export default function App() {
     setBusy('export');
     try {
       assertSafeWorkflow(wf);
-      const selection = { ...execution, model: execution.model.trim() };
+      const selection = {
+        ...execution,
+        model: execution.backend === 'opencode' ? '' : execution.model.trim(),
+      };
       assertSafeWorkflow(selection);
-      const check = await api<{ issues: Issue[] }>('validate', { workflow: wf, mode: 'local' });
+      const ownerIssues = selection.backend === 'opencode' ? ownerConnectionIssues(wf) : [];
+      if (ownerIssues.length) {
+        setIssues(ownerIssues);
+        setModal('check');
+        return;
+      }
+      const check = await api<{ issues: Issue[] }>('validate', {
+        workflow: wf,
+        mode: 'local',
+        execution: selection,
+      });
       setIssues(check.issues.filter((issue) => issue.code !== 'model'));
       if (check.issues.some((i) => i.severity === 'error')) {
         setModal('check');
@@ -1374,6 +1390,8 @@ export default function App() {
                     onDuplicate={duplicate}
                     onDelete={remove}
                     onAgents={() => setModal('agents')}
+                    onMembers={() => setModal('project')}
+                    credentials={credentials}
                   />
                 )}
               </div>
@@ -1421,7 +1439,14 @@ export default function App() {
                       onCredentialsChange={setCredentials}
                     />
                   )}
-                  {modal === 'project' && <ProjectSettings wf={wf} change={change} />}
+                  {modal === 'project' && (
+                    <ProjectSettings
+                      wf={wf}
+                      change={change}
+                      credentials={credentials}
+                      onCredentialsChange={setCredentials}
+                    />
+                  )}
                   {modal === 'planner' && (
                     <RequirementIntake
                       wf={intakeProject || wf}
@@ -1557,10 +1582,9 @@ export default function App() {
                         <>
                           <h3>Your agents have their assignments.</h3>
                           <p>
-                            Every role will use {execution.backend === 'codex' ? 'Codex' : 'Claude'}
-                            {execution.model
-                              ? ` with ${execution.model}`
-                              : ' with its default model'}
+                            {execution.backend === 'opencode'
+                              ? "OpenCode will run each task with its owner's model and API key"
+                              : `Every role will use ${execution.backend === 'codex' ? 'Codex' : 'Claude'}${execution.model ? ` with ${execution.model}` : ' with its default model'}`}
                             . Tasks follow the connections and review gates on your canvas.
                           </p>
                         </>
@@ -1572,10 +1596,15 @@ export default function App() {
                             void exportZip();
                           }}
                         >
-                          <h3>One choice. Every agent.</h3>
+                          <h3>
+                            {execution.backend === 'opencode'
+                              ? 'Your team. Their own models.'
+                              : 'One choice. Every agent.'}
+                          </h3>
                           <p>
-                            Your agents share a coding assistant, each with its own assignment and
-                            working copy. Independent tasks can run together.
+                            {execution.backend === 'opencode'
+                              ? "Run your team on one computer. Each task follows its owner's model connection; independent tasks can run together."
+                              : 'Your agents share a coding assistant, each with its own assignment and working copy. Independent tasks can run together.'}
                           </p>
                           <div className="field">
                             <label htmlFor="export-backend">Run with</label>
@@ -1584,32 +1613,63 @@ export default function App() {
                               value={execution.backend}
                               onChange={(event) =>
                                 setExecution({
-                                  backend: event.target.value as 'codex' | 'claude',
+                                  backend: event.target.value as 'codex' | 'claude' | 'opencode',
                                   model: '',
                                 })
                               }
                             >
                               <option value="codex">Codex</option>
                               <option value="claude">Claude</option>
+                              <option value="opencode">OpenCode · each owner's API</option>
                             </select>
                           </div>
-                          <div className="field">
-                            <label htmlFor="export-model">Shared model (optional)</label>
-                            <input
-                              id="export-model"
-                              value={execution.model}
-                              placeholder="Use your coding assistant’s default"
-                              autoComplete="off"
-                              maxLength={128}
-                              onChange={(event) =>
-                                setExecution((value) => ({ ...value, model: event.target.value }))
-                              }
-                            />
-                          </div>
+                          {execution.backend !== 'opencode' ? (
+                            <div className="field">
+                              <label htmlFor="export-model">Shared model (optional)</label>
+                              <input
+                                id="export-model"
+                                value={execution.model}
+                                placeholder="Use your coding assistant’s default"
+                                autoComplete="off"
+                                maxLength={128}
+                                onChange={(event) =>
+                                  setExecution((value) => ({ ...value, model: event.target.value }))
+                                }
+                              />
+                            </div>
+                          ) : (
+                            <div className="export-owner-connections">
+                              <ul aria-label="Task owner connections">
+                                {wf.project.members
+                                  .filter((member) =>
+                                    wf.nodes.some(
+                                      (node) =>
+                                        node.type === 'agent_task' &&
+                                        node.config.owner_id === member.id,
+                                    ),
+                                  )
+                                  .map((member) => (
+                                    <li key={member.id}>
+                                      <strong>{member.name}</strong>
+                                      <span>
+                                        {member.connection?.model || 'Model connection required'}
+                                      </span>
+                                    </li>
+                                  ))}
+                              </ul>
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() => setModal('project')}
+                              >
+                                Configure team connections ↗
+                              </button>
+                            </div>
+                          )}
                           <div className="note">
-                            Requires Python 3.10+ and the selected coding CLI installed and signed
-                            in on your computer. Your account supplies model access. No API keys are
-                            included in the ZIP.
+                            {execution.backend === 'opencode'
+                              ? 'Requires Python 3.10+ and OpenCode on the execution computer. Add each member’s API key in the extracted package before running. No API keys are included in the ZIP.'
+                              : 'Requires Python 3.10+ and the selected coding CLI installed and signed in on your computer. Your account supplies model access. No API keys are included in the ZIP.'}
                           </div>
                           <button className="primary full" type="submit" disabled={!!busy}>
                             {busy === 'export' ? (
@@ -1621,7 +1681,7 @@ export default function App() {
                           </button>
                         </form>
                       )}
-                      <ExportRunGuide />
+                      <ExportRunGuide backend={execution.backend} />
                       {exportDownloaded && (
                         <button className="primary full" onClick={() => setModal(null)}>
                           Back to canvas
