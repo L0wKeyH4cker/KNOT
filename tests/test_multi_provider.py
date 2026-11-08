@@ -245,6 +245,7 @@ class MultiProviderRoutingTests(unittest.TestCase):
             # This is our own generated, already validated archive.
             archive.extractall(target)
         environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+        environment['KNOT_RUNS_DIR'] = str(self.root / '.test-registry')
         finished = subprocess.run([sys.executable, "-X", "utf8", "run.py", "--mode", "real"], cwd=target,
                                   env=environment, capture_output=True, text=True, encoding="utf-8", timeout=20)
         self.assertEqual(finished.returncode, 0, finished.stderr)

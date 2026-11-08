@@ -24,6 +24,7 @@ class DeliveryAcceptanceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="knot-delivery-", dir=self.scratch)
         self.root = Path(self.temporary.name).resolve()
         self.assertTrue(self.root.is_relative_to(self.scratch.resolve()))
+        self.environment = {**os.environ, 'KNOT_RUNS_DIR': str(self.root / '.test-registry')}
         self.workflow = load_template()
         for node in self.workflow["nodes"]:
             if node["type"] == "agent_task":
@@ -45,7 +46,7 @@ class DeliveryAcceptanceTests(unittest.TestCase):
         return target
 
     def run_cli(self, folder, *arguments):
-        environment = dict(os.environ)
+        environment = dict(self.environment)
         environment.pop("PYTHONPATH", None)
         result = subprocess.run(
             [sys.executable, "run.py", "--mode", "mock", *arguments],
@@ -163,7 +164,7 @@ class DeliveryAcceptanceTests(unittest.TestCase):
         folder = self.unpack(self.workflow)
         launched = subprocess.run(
             ["cmd.exe", "/d", "/c", "start.bat", "--mode", "mock"], cwd=folder,
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, env=self.environment,
         )
         self.assertEqual(launched.returncode, 2, launched.stdout + launched.stderr)
         self.assertTrue((folder / ".venv/Scripts/python.exe").is_file())

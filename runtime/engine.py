@@ -84,6 +84,7 @@ class Engine:
         self.root = resolve_path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.mode = mode
+        self.quiet = False
         self.nodes = {node["id"]: node for node in workflow["nodes"]}
         self.agents = {agent["id"]: agent for agent in workflow["agents"]}
         self.resources = {resource["id"]: resource for resource in workflow["resources"]}
@@ -97,15 +98,20 @@ class Engine:
         self.incoming = {nid: [edge for edge in workflow["edges"] if edge["target"] == nid] for nid in self.nodes}
         self.limits = workflow["limits"]
         self.state_path = safe_path(self.root, str(state_path or "logs/run-state.json").replace("\\", "/"), ("logs",))
+        self.progress_path = self.state_path.with_name(self.state_path.stem + ".progress.json")
         self.log_path = safe_path(self.root, "logs/events.jsonl", ("logs",))
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self._last_progress_write = 0.0
         self.resuming = False
         self.protected_outputs = {"results/" + mapping["filename"].replace("\\", "/") for node in workflow["nodes"] if node["type"] == "output" for mapping in node["config"]["mappings"]}
         self.state = {"schema_version": "1.0", "run_id": uuid.uuid4().hex, "workflow_hash": fingerprint(workflow), "mode": mode,
                       "status": "pending", "started_at": now(), "updated_at": now(),
-                      "nodes": {nid: {"status": "pending", "attempts": 0} for nid in self.nodes}, "results": {}, "events": [], "warnings": [i for i in issues if i["severity"] == "warning"]}
+                      "project": {"id": workflow["project"]["id"], "name": workflow["project"]["name"]},
+                      "nodes": {nid: {"status": "pending", "attempts": 0, "label": n["label"], "type": n["type"],
+                                      "agent_id": n["config"].get("agent_id"), "agent_name": self.agents.get(n["config"].get("agent_id"), {}).get("name", "")}
+                                for nid, n in self.nodes.items()}, "results": {}, "events": [], "last_events": [], "warnings": [i for i in issues if i["severity"] == "warning"]}
         if self.execution:
             self.state["execution"] = copy.deepcopy(self.execution)
 
@@ -128,17 +134,87 @@ class Engine:
                     if attempt == 4:
                         raise
                     time.sleep(0.02 * (2 ** attempt))
+            self._save_progress()
+
+    def _save_progress(self) -> None:
+        """A bounded read model for observers; never include prompts or results."""
+        from .activity import sanitize_text
+        with self.lock:
+            nodes = {}
+            for nid, item in self.state["nodes"].items():
+                metadata = self.nodes[nid]
+                summary = {key: item[key] for key in ("status", "started_at", "finished_at", "attempts", "last_activity_at", "session_id") if key in item}
+                summary.update({"label": sanitize_text(metadata["label"], 160), "type": metadata["type"],
+                                "agent_id": metadata["config"].get("agent_id"),
+                                "agent_name": sanitize_text(self.agents.get(metadata["config"].get("agent_id"), {}).get("name", ""), 120)})
+                if item.get("activity"):
+                    summary["activity"] = item["activity"]
+                if item.get("error"):
+                    summary["error"] = sanitize_text(item["error"], 500)
+                if item.get("status") == "waiting_review":
+                    summary["instructions"] = sanitize_text(item.get("instructions", ""), 500)
+                    summary["owner_id"] = item.get("owner_id")
+                nodes[nid] = summary
+            progress = {key: self.state[key] for key in ("run_id", "mode", "status", "started_at")}
+            progress.update({"project": {"id": self.workflow["project"]["id"], "name": sanitize_text(self.workflow["project"]["name"], 160)},
+                             "updated_at": now(), "nodes": nodes, "last_events": self.state.get("last_events", [])[-30:]})
+            if self.execution:
+                progress["execution"] = self.execution
+            relative = self.progress_path.relative_to(self.root).as_posix()
+            try:
+                path = safe_path(self.root, relative, ("logs",))
+                temporary = safe_path(self.root, relative + ".tmp", ("logs",))
+                temporary.write_text(json.dumps(progress, ensure_ascii=False), encoding="utf-8")
+                for attempt in range(5):
+                    try:
+                        temporary.replace(path)
+                        break
+                    except PermissionError:
+                        if attempt == 4:
+                            raise
+                        time.sleep(0.02 * (2 ** attempt))
+                self._last_progress_write = time.monotonic()
+            except OSError:
+                # Observability must not fail an otherwise healthy task. The
+                # authoritative run-state and append-only log remain available.
+                pass
 
     def _event(self, event: str, node_id: str | None = None, **details) -> None:
+        from .activity import sanitize_text
         with self.lock:
             record = redact({"time": now(), "event": event, **({"node_id": node_id} if node_id else {}), **details})
             self.state["events"].append(record)
             safe_path(self.root, "logs/events.jsonl", ("logs",))
             with self.log_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-            if self.mode == "local" and event in {"node_started", "node_succeeded", "node_failed", "waiting_review", "run_completed", "run_failed"}:
+            activity = details.get("detail", {}).get("activity") if event == "coding_event" else None
+            activity_changed = False
+            if isinstance(activity, dict) and node_id in self.state["nodes"]:
+                activity = {key: value for key, value in activity.items() if key in ("kind", "text", "status", "tool", "paths", "exit_code")}
+                for key in ("text", "kind", "status", "tool"):
+                    if key in activity:
+                        activity[key] = sanitize_text(activity[key], 300)
+                if "paths" in activity:
+                    activity["paths"] = [sanitize_text(p, 200) for p in activity["paths"][:8]] if isinstance(activity["paths"], list) else []
+                activity_changed = activity != self.state["nodes"][node_id].get("activity")
+                self.state["nodes"][node_id].update({"activity": activity, "last_activity_at": record["time"]})
+            if event == "coding_event" and node_id in self.state["nodes"] and details.get("detail", {}).get("session_id"):
+                self.state["nodes"][node_id]["session_id"] = sanitize_text(details["detail"]["session_id"], 120)
+            important = event != "coding_event" or activity is not None
+            if important:
+                recent = {"time": record["time"], "event": event, "node_id": node_id,
+                          "label": sanitize_text(self.nodes.get(node_id, {}).get("label", "Workflow"), 160)}
+                if activity:
+                    recent["activity"] = activity
+                if details.get("error"):
+                    recent["error"] = sanitize_text(details["error"], 500)
+                self.state.setdefault("last_events", []).append(recent)
+                self.state["last_events"] = self.state["last_events"][-30:]
+            if activity and (activity_changed or time.monotonic() - self._last_progress_write >= 0.25):
+                self._save_progress()
+            if not self.quiet and self.mode == "local" and event in {"node_started", "node_succeeded", "node_failed", "waiting_review", "run_completed", "run_failed"}:
                 label = self.nodes[node_id]["label"] if node_id in self.nodes else "Workflow"
-                print(redact(f"[KNOT] {label}: {event.removeprefix('node_').removeprefix('run_')}"), flush=True)
+                print(sanitize_text(f"[KNOT] {label}: {event.removeprefix('node_').removeprefix('run_')}", 500), flush=True)
 
     def _preflight_inputs(self) -> None:
         used = {rid for node in self.nodes.values() if node["type"] == "shared_resource" for rid in node["config"]["resource_ids"]}

@@ -183,7 +183,7 @@ This ZIP contains your reviewed workflow and a local scheduler. Coding agents wr
    - Claude Code: https://code.claude.com/docs/en/setup
 2. Extract this ZIP into a new folder. Add any existing project files to `workspace/` and provide missing resources listed below.
 3. Double-click `start.bat` on Windows, or run `sh start.sh` on macOS/Linux. The launcher starts real local agents, not a mock run.
-4. Read the live task status. When a Human Review gate pauses, inspect the drafts and approve, reject, or leave it paused.
+4. Follow the live terminal dashboard: task states, elapsed time, commands, file changes, and recent activity. When a Human Review gate pauses, inspect the drafts and approve, reject, or leave it paused.
 
 Selected backend: **{backend}**
 Shared model: **{model}**
@@ -198,9 +198,23 @@ To choose a different backend/model later, run `python run.py --configure` befor
 python run.py --interactive
 python run.py --backend codex --validate
 python run.py --backend claude --model YOUR_MODEL
+python knot.py monitor
+python knot.py status
 ```
 
 `--validate` checks the workflow and local CLI availability without asking a model to work. Authentication and provider availability are only established by an actual CLI request. No local coding run was verified when this package was exported.
+
+## Terminal monitor
+
+Local runs automatically show a live dashboard in an interactive terminal. Use Up/Down or j/k to select a task, Tab or n/p to switch projects, and q to hide the dashboard while execution continues. Ctrl+C in the runner stops its local coding processes. `python run.py --plain` keeps scrolling logs instead.
+
+To watch all registered KNOT projects on this computer, open another terminal and run `python knot.py monitor` (Windows shortcut: `.\\knot.cmd monitor`; macOS/Linux: `sh knot.sh monitor`). The monitor only observes: closing it does not stop jobs, launch agents, or approve reviews. `python knot.py run --interactive` starts this package's workflow.
+
+`python knot.py status` prints one snapshot; add `--json` for a machine-readable summary. Older or unregistered folders can be added explicitly: `python knot.py monitor --root "PATH TO RUNNER"`. Older packages can only show events they already recorded; re-export to get detailed live activity.
+
+The dashboard shows completed task counts rather than an estimated model percentage. Commands and file activity appear when the coding CLI emits them; quiet periods show time since the last event. Lost heartbeats are marked OFFLINE, not complete. Human Review remains in the runner terminal.
+
+Discovery stays on this computer: small run pointers and heartbeats are saved under `%LOCALAPPDATA%/KNOT/runs` on Windows or `$XDG_STATE_HOME/knot/runs` (default `~/.local/state/knot/runs`) on macOS/Linux. Set `KNOT_RUNS_DIR` to use another shared directory. The monitor does not scan your disk. Progress summaries exclude prompts, result bodies, command output, and private reasoning; visible activity is bounded and credential values are redacted.
 
 ## Files and results
 
@@ -212,6 +226,8 @@ python run.py --backend claude --model YOUR_MODEL
 - `workspace/`: optional starting source files. This directory starts empty.
 - `.knot/tasks/`: separate working copies and drafts for individual tasks.
 - `logs/run-state.json`, `logs/events.jsonl`: task status, review decisions, execution events, and errors.
+- `logs/run-state.progress.json`: small activity/status summary used by the terminal monitor.
+- `knot.py`, `knot.cmd`, `knot.sh`: standalone local terminal client; no third-party packages required.
 - `results/project/`: combined project files published by an Output node, after any required review.
 - `results/`: the reports/JSON/CSV mapped on the canvas.
 
@@ -287,6 +303,8 @@ def build_bundle(workflow, execution=None):
             if node["type"] == "agent_task":
                 archive.writestr(f"tasks/task-{index:03d}-{node['id']}.md", task_guide(workflow, node))
         archive.writestr("run.py", (PROJECT_ROOT / "run.py").read_bytes())
+        for name in ("knot.py", "knot.cmd", "knot.sh"):
+            archive.writestr(name, (PROJECT_ROOT / name).read_bytes())
         runtime_files = sorted((PROJECT_ROOT / "runtime").glob("*.py"))
         if not runtime_files:
             raise BundleError("固定执行器尚不可用。")

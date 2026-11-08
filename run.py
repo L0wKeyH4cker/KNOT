@@ -6,6 +6,7 @@ import argparse
 import json
 import signal
 import sys
+import threading
 from pathlib import Path
 
 from runtime.engine import Engine, WorkflowError, fingerprint
@@ -19,20 +20,62 @@ def check_backend(backend: str) -> dict:
     return check(backend)
 
 
-def run_engine(engine: Engine, mode: str) -> dict:
-    if mode != "local":
-        return engine.run()
-    from runtime.coding import reset_cancellation
-    reset_cancellation()
+def run_engine(engine: Engine, mode: str, *, plain: bool = False, tui: bool = False) -> dict:
+    from runtime.registry import RunRegistration, list_runs
+    if mode == "local":
+        from runtime.coding import reset_cancellation
+        reset_cancellation()
 
     def interrupt(signum, frame):
-        from runtime.coding import cancel_all
-        cancel_all()
+        if mode == "local":
+            from runtime.coding import cancel_all
+            cancel_all()
         raise KeyboardInterrupt
 
     previous = signal.signal(signal.SIGINT, interrupt)
     try:
-        return engine.run()
+        with RunRegistration(engine.root, engine.state_path, engine.state["run_id"]) as registration:
+            interactive_terminal = bool(sys.stdout.isatty() and sys.stdin.isatty())
+            dashboard = not plain and interactive_terminal and (mode == "local" or tui)
+            if not dashboard:
+                result = engine.run()
+            else:
+                from runtime.monitor import watch
+                stopped = threading.Event()
+                outcome = {}
+                engine.quiet = True
+                def execute():
+                    try:
+                        outcome["result"] = engine.run()
+                    except BaseException as error:
+                        outcome["error"] = error
+                    finally:
+                        stopped.set()
+                worker = threading.Thread(target=execute, name="knot-workflow")
+                worker.start()
+                try:
+                    try:
+                        reason = watch(lambda: list_runs(roots=[engine.root]), stop_event=stopped, embedded=True)
+                    except (OSError, ValueError, RuntimeError):
+                        # A display failure must not cancel healthy coding jobs.
+                        reason = "plain"
+                    if reason in ("closed", "plain") and not stopped.is_set():
+                        engine.quiet = False
+                        print("Dashboard closed or unavailable; execution continues with logs. Open another terminal with: python knot.py monitor", flush=True)
+                    worker.join()
+                finally:
+                    if not stopped.is_set():
+                        if mode == "local":
+                            from runtime.coding import cancel_all
+                            cancel_all()
+                        worker.join()
+                    engine.quiet = False
+                if "error" in outcome:
+                    raise outcome["error"]
+                result = outcome["result"]
+        if registration.warning:
+            print("KNOT monitor discovery: " + registration.warning + " Watch this folder directly with --root.", file=sys.stderr)
+        return result
     finally:
         signal.signal(signal.SIGINT, previous)
 
@@ -128,6 +171,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", help="One optional model for all roles; empty uses the assistant's configured default")
     parser.add_argument("--configure", action="store_true", help="Choose and save the shared assistant without starting a run")
     parser.add_argument("--interactive", action="store_true", help="Show assistant selection and explicit human-review prompts")
+    display = parser.add_mutually_exclusive_group()
+    display.add_argument("--plain", action="store_true", help="Use scrolling logs instead of the live terminal dashboard")
+    display.add_argument("--tui", action="store_true", help="Show the dashboard in a supported interactive terminal (also in explicit mock mode)")
     parser.add_argument("--resume", action="store_true", help="Resume a saved human-review pause")
     parser.add_argument("--review", help="Waiting Human Review node id")
     parser.add_argument("--decision", choices=("approve", "reject"))
@@ -203,13 +249,13 @@ def main(argv: list[str] | None = None) -> int:
                     return 2
                 raise ValueError("A run already exists. Its logs and workspaces are preserved. Use a fresh exported folder for a new run.")
         if state is None:
-            state = run_engine(engine, args.mode)
+            state = run_engine(engine, args.mode, plain=args.plain, tui=args.tui)
         while state["status"] == "waiting_review" and interactive:
             decision = ask_review(state, root)
             if decision is None:
                 break
             engine.resume(*decision)
-            state = run_engine(engine, args.mode)
+            state = run_engine(engine, args.mode, plain=args.plain, tui=args.tui)
         show_state(state, engine.state_path, args.mode, root)
         if state["status"] == "waiting_review":
             return 2

@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import signal
 import tempfile
+import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -23,6 +25,9 @@ class LocalLauncherTests(unittest.TestCase):
         scratch.mkdir(exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(prefix='local-launcher-', dir=scratch)
         self.root = Path(self.temp.name)
+        environment = patch.dict(os.environ, {'KNOT_RUNS_DIR': str(self.root / '.test-registry')})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.workflow = load_template()
         for agent in self.workflow['agents']:
             agent['model'] = ''
@@ -167,6 +172,71 @@ class LocalLauncherTests(unittest.TestCase):
         self.assertEqual({(backend, model) for backend, model, _ in calls}, {('codex', 'one-model')})
         self.assertEqual(len({str(cwd) for _, _, cwd in calls}), len(calls))
         self.assertEqual(prompt.call_count, 1, 'Saved backend must not prompt again; only human review should prompt')
+
+    def test_hiding_or_unavailable_dashboard_waits_for_worker_to_complete(self):
+        for display_result in ('closed', 'plain', OSError('Terminal unavailable')):
+            with self.subTest(display_result=str(display_result)):
+                started, release, finished = threading.Event(), threading.Event(), threading.Event()
+                state = {'run_id': 'embedded-fixture', 'status': 'completed', 'nodes': {}}
+                engine = SimpleNamespace(root=self.root, state_path=self.root / 'logs/run-state.json', state=state, quiet=False)
+                worker_ids = []
+
+                def execute():
+                    worker_ids.append(threading.get_ident())
+                    started.set()
+                    if not release.wait(3):
+                        raise RuntimeError('The monitor test never released the worker')
+                    finished.set()
+                    return state
+
+                engine.run = execute
+
+                def watch(snapshot, *, stop_event, embedded):
+                    self.assertTrue(embedded)
+                    self.assertTrue(started.wait(2))
+                    self.assertFalse(stop_event.is_set())
+                    self.assertFalse(finished.is_set())
+                    self.assertTrue(engine.quiet)
+                    # The monitor returns while the worker is still doing work.
+                    release_timer = threading.Timer(0.05, release.set)
+                    release_timer.start()
+                    if isinstance(display_result, Exception):
+                        raise display_result
+                    return display_result
+
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+                        patch('sys.stdin.isatty', return_value=True), patch('sys.stdout.isatty', return_value=True), \
+                        patch('runtime.monitor.watch', side_effect=watch), patch('runtime.coding.cancel_all') as cancel:
+                    result = run.run_engine(engine, 'local')
+                self.assertIs(result, state)
+                self.assertTrue(finished.is_set())
+                self.assertEqual(len(worker_ids), 1, 'Closing the dashboard must not restart the workflow')
+                self.assertNotEqual(worker_ids[0], threading.get_ident())
+                self.assertFalse(engine.quiet)
+                cancel.assert_not_called()
+
+    def test_dashboard_finishes_at_review_and_existing_review_stays_unchanged(self):
+        engine = Engine(self.workflow, self.root, mode='mock')
+
+        def watch(snapshot, *, stop_event, embedded):
+            self.assertTrue(embedded)
+            self.assertTrue(stop_event.wait(5), 'Mock workflow did not reach its review gate')
+            self.assertEqual(snapshot()[0]['status'], 'waiting_review')
+            return 'finished'
+
+        with contextlib.redirect_stdout(io.StringIO()), patch('sys.stdin.isatty', return_value=True), \
+                patch('sys.stdout.isatty', return_value=True), patch('runtime.monitor.watch', side_effect=watch):
+            state = run.run_engine(engine, 'mock', tui=True)
+        self.assertEqual(state['status'], 'waiting_review')
+        self.assertEqual(state['nodes']['review']['status'], 'waiting_review')
+        self.assertFalse((self.root / 'results/report.md').exists())
+        before = engine.state_path.read_bytes()
+        with patch.object(Engine, 'run', side_effect=AssertionError('A saved review must not execute again')), \
+                patch('runtime.monitor.watch') as monitor:
+            code, out, err, _ = self.launch('--mode', 'mock', '--interactive', '--tui', answers=['later'])
+        self.assertEqual(code, 2, out + err)
+        monitor.assert_not_called()
+        self.assertEqual(engine.state_path.read_bytes(), before)
 
 
 class LocalConfigTests(unittest.TestCase):

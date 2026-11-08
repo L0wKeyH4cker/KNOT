@@ -18,6 +18,7 @@ import threading
 import time
 from typing import Any, Callable
 
+from .activity import sanitize_text
 from .security import redact
 
 BACKENDS = {"codex", "claude"}
@@ -237,6 +238,84 @@ def _result_object(value: Any) -> dict:
     return {"content": value["content"], "data": value["data"], "checks": checks}
 
 
+def _public_message(value: Any) -> str:
+    """Show public progress text, never structured completion reports."""
+    if not isinstance(value, str):
+        return ""
+    candidate = value.strip()
+    fenced = candidate.startswith("```")
+    if fenced:
+        if "\n" not in candidate:
+            return ""
+        candidate = candidate.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    if candidate.startswith(("{", "[")):
+        # Both content and data in final records can contain task results.
+        # Keep them in the authoritative result, not the activity summary.
+        return ""
+    elif fenced:
+        return ""  # Code fences are not public progress descriptions.
+    return sanitize_text(value)
+
+
+def _activity_status(kind: str, details: dict) -> str:
+    if details.get("status") in ("failed", "error", "declined"):
+        return "failed"
+    if kind.endswith(".completed"):
+        return "failed" if type(details.get("exit_code")) is int and details["exit_code"] != 0 else "completed"
+    return "running"
+
+
+def _codex_activity(kind: str, details: dict) -> dict | None:
+    item_type = details.get("type")
+    status = _activity_status(kind, details)
+    if item_type == "command_execution" and isinstance(details.get("command"), str):
+        activity = {"kind": "command", "text": sanitize_text(details["command"]), "status": status, "tool": "shell"}
+        if type(details.get("exit_code")) is int:
+            activity["exit_code"] = details["exit_code"]
+        return activity
+    if item_type == "file_change" and isinstance(details.get("changes"), list):
+        paths = [sanitize_text(change["path"], 200) for change in details["changes"][:10]
+                 if isinstance(change, dict) and isinstance(change.get("path"), str)]
+        if paths:
+            return {"kind": "file", "text": sanitize_text("Files: " + ", ".join(paths)), "paths": paths, "status": status}
+    if item_type == "agent_message":
+        message = _public_message(details.get("text"))
+        if message:
+            return {"kind": "message", "text": message, "status": status}
+    if item_type == "mcp_tool_call":
+        tool = sanitize_text(details.get("tool", "Tool"), 80)
+        return {"kind": "tool", "text": tool, "tool": tool, "status": status}
+    # Reasoning, tool arguments, command stdout and patches are never forwarded.
+    return None
+
+
+def _claude_tool_activity(block: dict) -> dict:
+    name = block.get("name") if isinstance(block.get("name"), str) else "Tool"
+    tool = sanitize_text(name, 80)
+    args = block.get("input") if isinstance(block.get("input"), dict) else {}
+    activity = {"kind": "tool", "text": tool, "tool": tool, "status": "running"}
+    if name == "Bash" and isinstance(args.get("command"), str):
+        activity.update(kind="command", text=sanitize_text(args["command"]))
+    elif name in ("Read", "Write", "Edit", "NotebookEdit"):
+        path = args.get("file_path", args.get("notebook_path"))
+        if isinstance(path, str):
+            path = sanitize_text(path, 200)
+            activity.update(kind="tool" if name == "Read" else "file", paths=[path], text=sanitize_text(f"{tool}: {path}"))
+    elif name in ("Glob", "Grep"):
+        activity["text"] = f"{tool}: searching files"
+        if isinstance(args.get("path"), str):
+            activity["paths"] = [sanitize_text(args["path"], 200)]
+    return activity
+
+
+def _usage_summary(value: Any) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    # Fixed numeric fields prevent an unexpected provider payload leaking text.
+    return {key: value[key] for key in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+            if type(value.get(key)) is int and value[key] >= 0}
+
+
 class _Transcript:
     def __init__(self, backend: str, callback: Callable | None):
         self.backend = backend
@@ -247,6 +326,7 @@ class _Transcript:
         self.session_id: str | None = None
         self.usage: dict | None = None
         self.event_count = 0
+        self.tools: dict[str, dict] = {}
 
     def line(self, raw: bytes) -> None:
         try:
@@ -256,24 +336,30 @@ class _Transcript:
         if not isinstance(item, dict):
             return
         kind = item.get("type", "")
-        event = {"backend": self.backend, "event": str(kind)[:100]}
+        event = {"backend": self.backend, "event": sanitize_text(kind, 100)}
+        activities = []
         self.event_count += 1
         if self.backend == "codex":
             if kind == "thread.started":
-                self.session_id = item.get("thread_id")
+                self.session_id = item.get("thread_id") if isinstance(item.get("thread_id"), str) else None
             elif kind == "turn.completed":
                 self.finished = True
                 self.usage = item.get("usage")
             elif kind in ("turn.failed", "error"):
                 error = item.get("error") or item.get("message") or "Codex task failed"
                 self.error = error.get("message", str(error)) if isinstance(error, dict) else str(error)
-            elif kind == "item.completed" and isinstance(item.get("item"), dict):
+            elif kind in ("item.started", "item.updated", "item.completed") and isinstance(item.get("item"), dict):
                 details = item["item"]
-                event["item_type"] = details.get("type")
-                if details.get("type") == "agent_message":
+                event["item_type"] = sanitize_text(details.get("type"), 80)
+                if isinstance(details.get("id"), str):
+                    event["item_id"] = sanitize_text(details["id"], 100)
+                if kind == "item.completed" and details.get("type") == "agent_message":
                     self.final = details.get("text")
-                if details.get("type") == "command_execution":
+                if details.get("type") == "command_execution" and (details.get("exit_code") is None or type(details.get("exit_code")) is int):
                     event["exit_code"] = details.get("exit_code")
+                activity = _codex_activity(kind, details)
+                if activity:
+                    activities.append(activity)
         else:
             if isinstance(item.get("session_id"), str):
                 self.session_id = item["session_id"]
@@ -287,14 +373,39 @@ class _Transcript:
                 self.usage = item.get("usage")
             elif kind == "system" and item.get("subtype") == "permission_denied":
                 self.error = "Claude denied a tool permission. Review the CLI permissions before retrying."
+            elif kind in ("assistant", "user") and isinstance(item.get("message"), dict):
+                content = item["message"].get("content", [])
+                for block in content[:100] if isinstance(content, list) else []:
+                    if not isinstance(block, dict):
+                        continue
+                    if kind == "assistant" and block.get("type") == "tool_use":
+                        activity = _claude_tool_activity(block)
+                        tool_id = block.get("id")
+                        if isinstance(tool_id, str) and len(tool_id) <= 200 and len(self.tools) < 1000:
+                            self.tools[tool_id] = activity
+                        activities.append(activity)
+                    elif kind == "user" and block.get("type") == "tool_result":
+                        tool_id = block.get("tool_use_id")
+                        previous = self.tools.pop(tool_id, None) if isinstance(tool_id, str) else None
+                        activity = dict(previous or {"kind": "tool", "text": "Tool finished"})
+                        activity["status"] = "failed" if block.get("is_error") is True else "completed"
+                        activities.append(activity)
+                    elif kind == "assistant" and block.get("type") == "text":
+                        message = _public_message(block.get("text"))
+                        if message:
+                            activities.append({"kind": "message", "text": message})
         if self.callback and self.event_count <= 5000:
             if self.session_id:
-                event["session_id"] = self.session_id
-            self.callback(redact(event))
+                event["session_id"] = sanitize_text(self.session_id, 200)
+            usage = _usage_summary(item.get("usage"))
+            if usage:
+                event["usage"] = usage
+            for activity in activities or [None]:
+                self.callback(redact({**event, "activity": activity} if activity else event))
 
     def result(self) -> dict:
         if self.error:
-            raise RuntimeError(redact(self.error[:MAX_ERROR_CHARS]))
+            raise RuntimeError(sanitize_text(self.error, MAX_ERROR_CHARS))
         if not self.finished:
             raise RuntimeError(f"{self.backend} exited without a successful terminal event. The task is not marked complete.")
         result = _result_object(self.final)

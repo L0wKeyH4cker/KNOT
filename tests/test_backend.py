@@ -123,15 +123,16 @@ class BundleTests(unittest.TestCase):
         workflow = load_template()
         with temporary_run("knot-independent-") as directory:
             root = Path(directory)
+            environment = {**os.environ, 'KNOT_RUNS_DIR': str(root / '.test-registry')}
             with zipfile.ZipFile(io.BytesIO(build_bundle(workflow))) as archive:
                 archive.extractall(root)
-            first = subprocess.run([sys.executable, "run.py", "--mode", "mock"], cwd=root, capture_output=True, text=True, timeout=20)
+            first = subprocess.run([sys.executable, "run.py", "--mode", "mock"], cwd=root, capture_output=True, text=True, timeout=20, env=environment)
             self.assertEqual(first.returncode, 2, first.stdout + first.stderr)
             state = json.loads((root / "logs/run-state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["status"], "waiting_review")
             self.assertFalse((root / "results/report.md").exists())
             self.assertFalse((root / "results/summary.csv").exists())
-            second = subprocess.run([sys.executable, "run.py", "--mode", "mock", "--resume", "--review", "review", "--decision", "approve", "--reviewer", "member-3"], cwd=root, capture_output=True, text=True, timeout=20)
+            second = subprocess.run([sys.executable, "run.py", "--mode", "mock", "--resume", "--review", "review", "--decision", "approve", "--reviewer", "member-3"], cwd=root, capture_output=True, text=True, timeout=20, env=environment)
             self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
             self.assertIn("MOCK", (root / "results/report.md").read_text(encoding="utf-8"))
             self.assertIn("Walk", (root / "results/summary.csv").read_text(encoding="utf-8-sig"))
@@ -142,10 +143,11 @@ class BundleTests(unittest.TestCase):
         workflow["nodes"][7]["config"]["mappings"][0]["filename"] = "edited-report.md"
         with temporary_run("knot-edit-") as directory:
             root = Path(directory)
+            environment = {**os.environ, 'KNOT_RUNS_DIR': str(root / '.test-registry')}
             with zipfile.ZipFile(io.BytesIO(build_bundle(workflow))) as archive:
                 archive.extractall(root)
-            subprocess.run([sys.executable, "run.py", "--mode", "mock"], cwd=root, capture_output=True, timeout=20)
-            completed = subprocess.run([sys.executable, "run.py", "--mode", "mock", "--resume", "--review", "review", "--decision", "approve", "--reviewer", "member-3"], cwd=root, capture_output=True, timeout=20)
+            subprocess.run([sys.executable, "run.py", "--mode", "mock"], cwd=root, capture_output=True, timeout=20, env=environment)
+            completed = subprocess.run([sys.executable, "run.py", "--mode", "mock", "--resume", "--review", "review", "--decision", "approve", "--reviewer", "member-3"], cwd=root, capture_output=True, timeout=20, env=environment)
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
             self.assertEqual((root / "results/edited-report.md").read_text(encoding="utf-8").strip(), "# Modified by the canvas")
             self.assertFalse((root / "results/report.md").exists())
