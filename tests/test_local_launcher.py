@@ -191,8 +191,9 @@ class LocalLauncherTests(unittest.TestCase):
 
                 engine.run = execute
 
-                def watch(snapshot, *, stop_event, embedded):
+                def watch(snapshot, *, stop_event, embedded, splash):
                     self.assertTrue(embedded)
+                    self.assertFalse(splash)
                     self.assertTrue(started.wait(2))
                     self.assertFalse(stop_event.is_set())
                     self.assertFalse(finished.is_set())
@@ -207,7 +208,7 @@ class LocalLauncherTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
                         patch('sys.stdin.isatty', return_value=True), patch('sys.stdout.isatty', return_value=True), \
                         patch('runtime.monitor.watch', side_effect=watch), patch('runtime.coding.cancel_all') as cancel:
-                    result = run.run_engine(engine, 'local')
+                    result = run.run_engine(engine, 'local', splash=False)
                 self.assertIs(result, state)
                 self.assertTrue(finished.is_set())
                 self.assertEqual(len(worker_ids), 1, 'Closing the dashboard must not restart the workflow')
@@ -218,8 +219,9 @@ class LocalLauncherTests(unittest.TestCase):
     def test_dashboard_finishes_at_review_and_existing_review_stays_unchanged(self):
         engine = Engine(self.workflow, self.root, mode='mock')
 
-        def watch(snapshot, *, stop_event, embedded):
+        def watch(snapshot, *, stop_event, embedded, splash):
             self.assertTrue(embedded)
+            self.assertTrue(splash)
             self.assertTrue(stop_event.wait(5), 'Mock workflow did not reach its review gate')
             self.assertEqual(snapshot()[0]['status'], 'waiting_review')
             return 'finished'

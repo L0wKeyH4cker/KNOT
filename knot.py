@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("--root", action="append", default=[], metavar="FOLDER", help="Also watch this extracted project; repeat for older unregistered runs")
         command.add_argument("--once", action="store_true", help="Print once instead of refreshing the terminal")
         command.add_argument("--json", action="store_true", help="Print a sanitized JSON snapshot and exit")
+        command.add_argument("--no-splash", action="store_true", help="Skip the startup logo and open the dashboard immediately")
     if not arguments:
         arguments = ["monitor"]
     args = parser.parse_args(arguments)
@@ -29,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     from runtime.activity import sanitize_text
-    from runtime.monitor import render_dashboard, watch
+    from runtime.monitor import _ascii_output, render_dashboard, watch
     from runtime.registry import list_runs
     roots = [Path(value).expanduser().resolve() for value in args.root]
     if not roots and (Path.cwd() / "logs/run-state.json").is_file():
@@ -41,9 +42,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(read_runs(), ensure_ascii=False, indent=2))
         elif args.command == "status" or args.once:
             width, height = shutil.get_terminal_size((110, 36))
-            print(render_dashboard(read_runs(), width=width, height=height))
+            print(render_dashboard(read_runs(), width=width, height=height, ascii_only=_ascii_output(sys.stdout)))
         else:
-            watch(read_runs)
+            watch(read_runs, splash=not args.no_splash)
         return 0
     except KeyboardInterrupt:
         print("\nMonitor closed. Workflows continue running in their own terminals.")

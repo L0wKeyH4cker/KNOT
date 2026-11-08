@@ -11,6 +11,7 @@ import unicodedata
 from typing import Callable, TextIO
 
 from .activity import sanitize_text
+from .terminal_brand import frame_form, logo_lines, splash_lines
 
 STATUS = {
     "pending": "WAITING", "running": "RUNNING", "succeeded": "DONE",
@@ -144,29 +145,48 @@ def _fit(lines: list[str], footer: str, width: int, height: int) -> str:
     return "\n".join(_crop(line, width) for line in content)
 
 
+def _brand_header(left: list[str], width: int, form: str, ascii_only: bool) -> list[str]:
+    mark = logo_lines(form, ascii_only=ascii_only)
+    mark_width = max(cell_width(row) for row in mark)
+    text_width = max(0, width - mark_width - 3)
+    result = []
+    for index, art in enumerate(mark):
+        text = _crop(left[index] if index < len(left) else "", text_width)
+        result.append(text + " " * (width - mark_width - cell_width(text)) + art)
+    return result
+
+
+def _live_count(runs: list[dict]) -> int:
+    return sum(_run_status(run) == "running" and run.get("live") is True for run in runs)
+
+
 def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int = 0,
-                     width: int = 100, height: int = 32, now: float | None = None) -> str:
-    """Render bounded plain text. Counts describe tasks, never invented work %."""
+                     width: int = 100, height: int = 32, now: float | None = None,
+                     animation_elapsed: float = 0, ascii_only: bool = False) -> str:
+    """Render safe plain text. Only a live runner animates; counts are actual tasks."""
     width, height = max(1, min(int(width), 240)), max(1, min(int(height), 100))
     now = time.time() if now is None else now
     runs = [run for run in runs if isinstance(run, dict)]
     footer = "Up/Down: task  |  n/p or Tab: project  |  q: close monitor (jobs keep running)"
     if width < 68:
         footer = "q close | j/k task | n/p project"
-    stamp = datetime.fromtimestamp(now).strftime("%H:%M:%S")
-    title = "KNOT  /  LOCAL AGENTS"
-    header = _pad(title, max(0, width - 10)) + stamp if width >= 42 else title
+    active = _live_count(runs)
+    form = frame_form(active > 0 and os.environ.get("KNOT_NO_ANIMATION") != "1", animation_elapsed)
+    full_header = width >= 54 and height >= 20
+    title = "KNOT / LOCAL AGENTS"
+    header = title if width >= 32 else "KNOT / AGENTS"
     if not runs:
-        return _fit([header, "-" * width, "No local workflows found.",
-                     "Start a downloaded workspace to see its agents here.",
-                     "Older runs: use python knot.py monitor --root PATH"], footer, width, height)
+        empty = [title, "No local workflows found.", "", "Your agents will appear here.", ""]
+        lines = _brand_header(empty, width, "k", ascii_only) if full_header else [header, empty[1]]
+        lines.extend(["", "Start a downloaded workspace to see its agents here.",
+                      "Older runs: use python knot.py monitor --root PATH"])
+        return _fit(lines, footer, width, height)
     selected_run = max(0, min(selected_run, len(runs) - 1))
     run = runs[selected_run]
     tasks = _tasks(run)
     selected_task = max(0, min(selected_task, len(tasks) - 1))
     done = sum(task.get("status") == "succeeded" for _, task in tasks)
     skipped = sum(task.get("status") == "skipped" for _, task in tasks)
-    active = sum(_run_status(item) == "running" for item in runs)
     review = sum(_run_status(item) == "waiting_review" for item in runs)
     run_status = _run_status(run)
     execution = run.get("execution") if isinstance(run.get("execution"), dict) else {}
@@ -174,11 +194,17 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
     model = sanitize_text(execution.get("model") or "assistant default")
     end = run.get("updated_at") if run_status not in ("running", "pending") else None
     task_count = f"{done}/{len(tasks)} agent tasks done" + (f" | {skipped} skipped" if skipped else "")
-    lines = [header, "-" * width, f"{len(runs)} projects  |  {active} running  |  {review} waiting for review"]
-    if width < 68 or height < 23:
-        lines.extend([f"[{selected_run + 1}/{len(runs)}] {_project(run)}",
+    project_word = "project" if len(runs) == 1 else "projects"
+    overview = f"{len(runs)} {project_word}  |  {active} running  |  {review} waiting for review"
+    project_line = f"{_project(run)}  |  {backend} / {model}"
+    counts_line = f"{task_count}  |  elapsed {_elapsed(run, now, end)}"
+    if not full_header:
+        # Keep task details readable when a five-row mark cannot fit.
+        small_mark = "K" if form == "k" else "o>o"
+        lines = [_pad(header, max(0, width - 4)) + small_mark, overview,
+                 f"[{selected_run + 1}/{len(runs)}] {_project(run)}",
                       f"{STATUS.get(run_status, run_status.upper())} | {backend} | {_elapsed(run, now, end)}",
-                      task_count])
+                      task_count]
         if tasks:
             nid, node = tasks[selected_task]
             status = "disconnected" if run_status == "disconnected" and node.get("status") == "running" else sanitize_text(node.get("status", "pending"))
@@ -191,6 +217,10 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
             lines.append("Review in the runner terminal; this monitor is read-only.")
         return _fit(lines, footer, width, height)
 
+    lines = _brand_header([title, overview, "", project_line, counts_line], width, form, ascii_only)
+    if run.get("root"):
+        lines.append(sanitize_text(run["root"], limit=1000))
+    lines.append("")
     project_slots = min(3 if height >= 30 else 2, len(runs))
     start, projects = _window(runs, selected_run, project_slots)
     lines.append("PROJECTS")
@@ -198,15 +228,13 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
         state = _run_status(item)
         label = STATUS.get(state, state.upper())
         marker = ">" if index == selected_run else " "
-        lines.append(f"{marker} {_pad(_project(item), width - 16)} {_pad(label, 12)}")
-    lines.extend(["-" * width, f"{_project(run)}  |  {backend} / {model}",
-                  f"{task_count}  |  elapsed {_elapsed(run, now, end)}", sanitize_text(run.get("root") or "", limit=1000)])
+        lines.append(f"{marker} {_pad(_project(item), width - 16)} {label}")
     if run_status == "disconnected":
         lines.append("OFFLINE: no fresh runner heartbeat. Running tasks below show their last saved state.")
     elif run_status == "waiting_review":
         lines.append("REVIEW NEEDED: approve or reject in the runner terminal. This monitor is read-only.")
-    lines.extend(["", "AGENT TASKS", f"   {_pad('STATE', 10)} {_pad('TASK / AGENT', width - 26)} ELAPSED"])
-    task_slots = min(max(1, height - len(lines) - 10), 7, len(tasks))
+    lines.extend(["", "AGENT TASKS"])
+    task_slots = min(max(1, height - len(lines) - 7), 7, len(tasks))
     if not tasks:
         lines.append("  No agent-task metadata in this run. See the recent workflow events below.")
     else:
@@ -226,7 +254,7 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
         activity = _activity(node)
         last = _timestamp(node.get("last_activity_at"))
         age = f" | last activity {_duration(now - last)} ago" if last is not None else ""
-        lines.extend(["-" * width, f"SELECTED: {sanitize_text(node.get('label') or nid)}{age}"])
+        lines.extend(["", f"SELECTED: {sanitize_text(node.get('label') or nid)}{age}"])
         if node.get("error"):
             lines.append("Error: " + sanitize_text(node["error"], limit=1000))
         lines.append(activity or "No task activity received yet. Waiting for the next CLI event.")
@@ -240,6 +268,55 @@ def render_dashboard(runs: list[dict], selected_run: int = 0, selected_task: int
         if not events:
             lines.append("No activity recorded yet.")
     return _fit(lines, footer, width, height)
+
+
+def colorize_frame(frame: str, enabled: bool = True) -> str:
+    """Style an already-sanitized renderer result; art and snapshots stay plain."""
+    if not enabled or "NO_COLOR" in os.environ:
+        return frame
+    base = "\x1b[40m\x1b[38;2;191;219;254m"
+    accent = "\x1b[1m\x1b[38;2;147;197;253m"
+    muted = "\x1b[38;2;148;163;184m"
+    selected = "\x1b[48;2;15;23;42m\x1b[38;2;224;242;254m"
+    result = []
+    for line in frame.splitlines():
+        style = ""
+        if line.startswith("> "):
+            style = selected
+        elif line.startswith(("KNOT", "PROJECTS", "AGENT TASKS", "SELECTED:", "RECENT ACTIVITY", "REVIEW NEEDED", "OFFLINE:", "Error:")):
+            style = accent
+        elif line.startswith(("Up/Down:", "q close", "Read error:")) or " projects  | " in line or " project  | " in line:
+            style = muted
+        result.append(base + style + line + "\x1b[0m")
+    return "\n".join(result)
+
+
+def _ascii_output(stream: TextIO) -> bool:
+    try:
+        artwork = "".join(logo_lines("k") + logo_lines("workflow")) + splash_lines(100, 32)
+        artwork.encode(getattr(stream, "encoding", None) or "utf-8")
+        return False
+    except (UnicodeEncodeError, LookupError):
+        return True
+
+
+def _finished_snapshot(runs: list[dict], selected_run: int, width: int, ascii_only: bool) -> str:
+    """Leave a small fixed K in scrollback after the alternate screen closes."""
+    left = ["KNOT / WORKFLOW UPDATE", "No workflow snapshot available.", "", "", ""]
+    if runs:
+        run = runs[max(0, min(selected_run, len(runs) - 1))]
+        tasks = _tasks(run)
+        status = _run_status(run)
+        left[1] = _project(run)
+        left[2] = STATUS.get(status, status.upper())
+        left[3] = f"{sum(task.get('status') == 'succeeded' for _, task in tasks)}/{len(tasks)} agent tasks done"
+        if status == "waiting_review":
+            left[4] = "Review required. Continue in the runner terminal."
+        elif status == "disconnected":
+            left[4] = "Runner offline; last saved state shown."
+    if width < 40:
+        return "\n".join(_crop(line, width) for line in ["K / KNOT", *left[1:]] if line)
+    return "\n".join(_brand_header(left, width, "k", ascii_only))
 
 
 class _Terminal:
@@ -297,7 +374,7 @@ class _Terminal:
     def __exit__(self, *_):
         try:
             if self.enabled:
-                self._write("\x1b[?25h\x1b[?1049l")
+                self._write("\x1b[0m\x1b[?25h\x1b[?1049l")
         finally:
             if self._termios:
                 import termios
@@ -351,19 +428,54 @@ class _Terminal:
 
 def _key_name(value: str) -> str | None:
     return {"q": "quit", "Q": "quit", "\x03": "interrupt", "j": "down", "k": "up",
-            "n": "next", "p": "previous", "\t": "next"}.get(value)
+            "n": "next", "p": "previous", "\t": "next"}.get(value, "skip" if value else None)
+
+
+def _show_splash(terminal, stop_event, embedded: bool, ascii_only: bool) -> str:
+    """A short, skippable introduction; the execution worker is already running."""
+    deadline = time.monotonic() + 0.8
+    previous_size = None
+    while time.monotonic() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            return "finished"
+        size = terminal.size()
+        if size != previous_size:
+            width, height = size
+            terminal.draw(colorize_frame(splash_lines(max(1, width - 1), height, ascii_only=ascii_only)))
+            previous_size = size
+        key = terminal.key()
+        if key == "quit":
+            return "closed"
+        if key == "interrupt":
+            if embedded:
+                raise KeyboardInterrupt
+            return "closed"
+        if key is not None:
+            return "skipped"
+        delay = min(0.05, max(0, deadline - time.monotonic()))
+        if stop_event is not None:
+            stop_event.wait(delay)
+        else:
+            time.sleep(delay)
+    return "shown"
 
 
 def watch(read_runs: Callable[[], list[dict]], stop_event=None, embedded: bool = False,
           stream: TextIO | None = None, input_stream: TextIO | None = None,
-          interval: float = 0.25) -> str:
+          interval: float = 0.25, splash: bool = True) -> str:
     """Observe snapshots; q closes this view and never cancels a workflow."""
     stream = stream or sys.stdout
     input_stream = input_stream or sys.stdin
     selected_run, selected_task = 0, 0
     selected_id = None
     interval = max(0.05, min(float(interval), 5.0))
+    ascii_only = _ascii_output(stream)
+    reduced_motion = os.environ.get("KNOT_NO_ANIMATION") == "1"
     with _Terminal(stream, input_stream) as terminal:
+        if terminal.enabled and splash and not reduced_motion:
+            if _show_splash(terminal, stop_event, embedded, ascii_only) == "closed":
+                return "closed"
+        animation_started = time.monotonic()
         while True:
             finishing = stop_event is not None and stop_event.is_set()
             try:
@@ -383,15 +495,17 @@ def watch(read_runs: Callable[[], list[dict]], stop_event=None, embedded: bool =
             width, height = terminal.size()
             # Leave the final column free to avoid automatic wrapping/scrolling.
             width = max(1, width - 1) if terminal.enabled else width
-            frame = render_dashboard(runs, selected_run, selected_task, width, height)
+            elapsed = 0 if finishing or reduced_motion or not terminal.enabled else time.monotonic() - animation_started
+            frame = render_dashboard(runs, selected_run, selected_task, width, height,
+                                     animation_elapsed=elapsed, ascii_only=ascii_only)
             if error_text:
                 frame = _fit(frame.splitlines()[:-1], "Read error: " + error_text, width, height)
-            terminal.draw(frame)
+            terminal.draw(colorize_frame(frame, enabled=terminal.enabled))
             if not terminal.enabled:
                 return "plain"
             if stop_event is not None and stop_event.is_set():
                 if finishing:
-                    return "finished"
+                    break
                 # Completion could have arrived while reading or drawing.
                 continue
             deadline = time.monotonic() + interval
@@ -417,3 +531,13 @@ def watch(read_runs: Callable[[], list[dict]], stop_event=None, embedded: bool =
                     break
                 if stop_event is None:
                     time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    # The alternate screen is restored before writing this small, fixed mark.
+    final = _finished_snapshot(runs, selected_run, width, ascii_only)
+    # Windows may have restored a console mode without ANSI support by now.
+    # Keep this scrollback summary plain and preserve the user's original colors.
+    encoding = getattr(stream, "encoding", None)
+    if encoding:
+        final = final.encode(encoding, "replace").decode(encoding, "replace")
+    stream.write(final + "\n")
+    stream.flush()
+    return "finished"

@@ -3,11 +3,18 @@ from __future__ import annotations
 
 import copy
 import io
+import re
 import threading
 import unittest
 from unittest.mock import patch
 
-from runtime.monitor import _Terminal, _key_name, cell_width, clip, render_dashboard, watch
+from runtime.monitor import _Terminal, _ascii_output, _key_name, cell_width, clip, colorize_frame, render_dashboard, watch as runtime_watch
+from runtime.terminal_brand import logo_lines
+
+
+def watch(*args, **kwargs):
+    kwargs.setdefault("splash", False)
+    return runtime_watch(*args, **kwargs)
 
 NOW = 1794096000.0
 
@@ -62,6 +69,51 @@ class FakeTerminal:
 
 
 class MonitorRenderTests(unittest.TestCase):
+    def test_only_live_running_workflows_animate_the_top_right_mark(self):
+        run = sample()
+        for elapsed, expected in ((0, "k"), (.9, "workflow"), (1.7, "k")):
+            with self.subTest(elapsed=elapsed):
+                frame = render_dashboard([run], now=NOW, animation_elapsed=elapsed, ascii_only=True)
+                self.assertEqual([line[-11:] for line in frame.splitlines()[:5]], list(logo_lines(expected, True)))
+                self.assertNotIn("\x1b", frame)
+        for status, live in (("completed", True), ("failed", True), ("waiting_review", True),
+                             ("pending", True), ("running", False), ("running", None)):
+            with self.subTest(status=status, live=live):
+                run.update(status=status, live=live)
+                frame = render_dashboard([run], now=NOW, animation_elapsed=.9, ascii_only=True)
+                self.assertEqual([line[-11:] for line in frame.splitlines()[:5]], list(logo_lines("k", True)))
+
+    def test_multiple_projects_animate_while_any_live_workflow_runs(self):
+        idle = sample("idle")
+        idle.update(status="completed", live=False)
+        frame = render_dashboard([idle, sample()], now=NOW, animation_elapsed=.9, ascii_only=True)
+        self.assertEqual([line[-11:] for line in frame.splitlines()[:5]], list(logo_lines("workflow", True)))
+
+    def test_colors_are_separate_and_no_color_keeps_plain_art(self):
+        frame = render_dashboard([sample()], now=NOW, ascii_only=True)
+        with patch("runtime.monitor.os.environ", {}):
+            styled = colorize_frame(frame)
+            self.assertIn("\x1b[", styled)
+            self.assertEqual(re.sub(r"\x1b\[[0-9;]*m", "", styled), frame)
+        with patch.dict("runtime.monitor.os.environ", {"NO_COLOR": ""}):
+            self.assertEqual(colorize_frame(frame), frame)
+            self.assertIn(logo_lines("k", True)[0], frame)
+        self.assertFalse(any(line and set(line) == {"-"} for line in frame.splitlines()))
+
+    def test_reduced_motion_keeps_fixed_k(self):
+        with patch.dict("runtime.monitor.os.environ", {"KNOT_NO_ANIMATION": "1"}):
+            frame = render_dashboard([sample()], now=NOW, animation_elapsed=.9, ascii_only=True)
+        self.assertEqual([line[-11:] for line in frame.splitlines()[:5]], list(logo_lines("k", True)))
+
+    def test_non_unicode_stream_uses_ascii_art(self):
+        class Stream:
+            encoding = "ascii"
+        self.assertTrue(_ascii_output(Stream()))
+        Stream.encoding = "gbk"
+        self.assertTrue(_ascii_output(Stream()))
+        Stream.encoding = "utf-8"
+        self.assertFalse(_ascii_output(Stream()))
+
     def test_real_task_counts_do_not_count_control_nodes_or_invent_percentages(self):
         frame = render_dashboard([sample()], selected_task=1, now=NOW)
         self.assertIn("1/3 agent tasks done", frame)
@@ -129,7 +181,9 @@ class MonitorRenderTests(unittest.TestCase):
 class MonitorInteractionTests(unittest.TestCase):
     def test_non_tty_outputs_one_snapshot_without_ansi_or_waiting(self):
         output = io.StringIO()
-        result = watch(lambda: [sample()], stream=output, input_stream=io.StringIO())
+        with patch("runtime.monitor._show_splash") as splash:
+            result = watch(lambda: [sample()], stream=output, input_stream=io.StringIO(), splash=True)
+            splash.assert_not_called()
         self.assertEqual(result, "plain")
         self.assertIn("KNOT", output.getvalue())
         self.assertNotIn("\x1b", output.getvalue())
@@ -180,12 +234,60 @@ class MonitorInteractionTests(unittest.TestCase):
             if len(terminal.frames) == 1:
                 stop.set()
         terminal.on_draw = on_draw
+        output = io.StringIO()
         with patch("runtime.monitor._Terminal", return_value=terminal):
-            result = watch(read, stop_event=stop)
+            result = watch(read, stop_event=stop, stream=output)
         self.assertEqual(result, "finished")
         self.assertEqual(calls, 2)
         self.assertIn("0 running", terminal.frames[-1])
         self.assertTrue(terminal.exited)
+        self.assertIn("WORKFLOW UPDATE", output.getvalue())
+        self.assertIn("DONE", output.getvalue())
+        self.assertLessEqual(len(output.getvalue().splitlines()), 5)
+        self.assertNotIn("\x1b", output.getvalue())
+
+    def test_splash_can_be_skipped_and_q_remains_read_only(self):
+        terminal = FakeTerminal(["skip", "quit"])
+        stop = threading.Event()
+        with patch("runtime.monitor._Terminal", return_value=terminal):
+            result = watch(lambda: [sample()], stop_event=stop, splash=True)
+        self.assertEqual(result, "closed")
+        self.assertFalse(stop.is_set())
+        self.assertIn("Your agents. One workflow.", terminal.frames[0])
+        self.assertIn("LOCAL AGENTS", terminal.frames[1])
+
+    def test_q_or_ctrl_c_during_splash_restores_terminal(self):
+        for key in ("quit", "interrupt"):
+            with self.subTest(key=key):
+                terminal = FakeTerminal([key])
+                with patch("runtime.monitor._Terminal", return_value=terminal):
+                    if key == "interrupt":
+                        with self.assertRaises(KeyboardInterrupt):
+                            watch(lambda: [sample()], splash=True, embedded=True)
+                    else:
+                        self.assertEqual(watch(lambda: [sample()], splash=True), "closed")
+                self.assertTrue(terminal.exited)
+
+    def test_stop_during_splash_goes_straight_to_final_fixed_mark(self):
+        stop = threading.Event()
+        terminal = FakeTerminal([None], on_draw=stop.set)
+        run = sample()
+        run.update(status="completed", live=False)
+        output = io.StringIO()
+        with patch("runtime.monitor._Terminal", return_value=terminal):
+            result = watch(lambda: [run], stop_event=stop, splash=True, stream=output)
+        self.assertEqual(result, "finished")
+        self.assertEqual(len(terminal.frames), 2)
+        self.assertIn("DONE", output.getvalue())
+        self.assertTrue(terminal.exited)
+
+    def test_reduced_motion_skips_the_splash(self):
+        terminal = FakeTerminal(["quit"])
+        with patch("runtime.monitor._Terminal", return_value=terminal), \
+             patch.dict("runtime.monitor.os.environ", {"KNOT_NO_ANIMATION": "1"}), \
+             patch("runtime.monitor._show_splash") as splash:
+            watch(lambda: [sample()], splash=True)
+        splash.assert_not_called()
 
     def test_ctrl_c_interrupts_embedded_runner_but_q_only_closes(self):
         terminal = FakeTerminal(["interrupt"])
@@ -229,6 +331,7 @@ class MonitorInteractionTests(unittest.TestCase):
         terminal.__exit__(None, None, None)
         self.assertIn("\x1b[?25h", output.getvalue())
         self.assertIn("\x1b[?1049l", output.getvalue())
+        self.assertIn("\x1b[0m", output.getvalue())
         self.assertFalse(terminal.enabled)
 
     def test_shortcuts_are_read_only_navigation(self):
@@ -236,7 +339,7 @@ class MonitorInteractionTests(unittest.TestCase):
         self.assertEqual(_key_name("\x03"), "interrupt")
         self.assertEqual(_key_name("\t"), "next")
         self.assertEqual(_key_name("j"), "down")
-        self.assertIsNone(_key_name("a"))  # No accidental approval shortcut.
+        self.assertEqual(_key_name("a"), "skip")  # Skips splash, never approves.
 
 
 if __name__ == "__main__":

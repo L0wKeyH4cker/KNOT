@@ -228,6 +228,8 @@ sh knot.sh monitor
 
 This dashboard shows all registered KNOT projects on this computer, including each task's state, elapsed time, commands, file changes, and recent activity. **The monitor only observes. It does not start or dispatch tasks.** Use the run command in step 2 to start work.
 
+Interactive dashboards briefly show the KNOT logo at startup. The top-right K / workflow icon alternates while work is running; it indicates activity, not a completion percentage. Idle, review, and finished states show a fixed K. Add `--no-splash` to the run or monitor command to skip the opening logo. Set the environment variable `KNOT_NO_ANIMATION=1` to disable animations, or `NO_COLOR=1` to disable colors. Status, JSON, and redirected output stay plain.
+
 - Up/Down or j/k selects a task. Tab or n/p switches projects.
 - Press q to hide a dashboard while the Agents continue working.
 - Ctrl+C or closing the **separate monitor terminal** only closes the monitor.

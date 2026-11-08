@@ -20,7 +20,7 @@ def check_backend(backend: str) -> dict:
     return check(backend)
 
 
-def run_engine(engine: Engine, mode: str, *, plain: bool = False, tui: bool = False) -> dict:
+def run_engine(engine: Engine, mode: str, *, plain: bool = False, tui: bool = False, splash: bool = True) -> dict:
     from runtime.registry import RunRegistration, list_runs
     if mode == "local":
         from runtime.coding import reset_cancellation
@@ -55,7 +55,7 @@ def run_engine(engine: Engine, mode: str, *, plain: bool = False, tui: bool = Fa
                 worker.start()
                 try:
                     try:
-                        reason = watch(lambda: list_runs(roots=[engine.root]), stop_event=stopped, embedded=True)
+                        reason = watch(lambda: list_runs(roots=[engine.root]), stop_event=stopped, embedded=True, splash=splash)
                     except (OSError, ValueError, RuntimeError):
                         # A display failure must not cancel healthy coding jobs.
                         reason = "plain"
@@ -174,6 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     display = parser.add_mutually_exclusive_group()
     display.add_argument("--plain", action="store_true", help="Use scrolling logs instead of the live terminal dashboard")
     display.add_argument("--tui", action="store_true", help="Show the dashboard in a supported interactive terminal (also in explicit mock mode)")
+    parser.add_argument("--no-splash", action="store_true", help="Skip the startup logo and open the dashboard immediately")
     parser.add_argument("--resume", action="store_true", help="Resume a saved human-review pause")
     parser.add_argument("--review", help="Waiting Human Review node id")
     parser.add_argument("--decision", choices=("approve", "reject"))
@@ -249,13 +250,13 @@ def main(argv: list[str] | None = None) -> int:
                     return 2
                 raise ValueError("A run already exists. Its logs and workspaces are preserved. Use a fresh exported folder for a new run.")
         if state is None:
-            state = run_engine(engine, args.mode, plain=args.plain, tui=args.tui)
+            state = run_engine(engine, args.mode, plain=args.plain, tui=args.tui, splash=not args.no_splash)
         while state["status"] == "waiting_review" and interactive:
             decision = ask_review(state, root)
             if decision is None:
                 break
             engine.resume(*decision)
-            state = run_engine(engine, args.mode, plain=args.plain, tui=args.tui)
+            state = run_engine(engine, args.mode, plain=args.plain, tui=args.tui, splash=False)
         show_state(state, engine.state_path, args.mode, root)
         if state["status"] == "waiting_review":
             return 2

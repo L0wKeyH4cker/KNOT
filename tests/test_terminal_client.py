@@ -35,7 +35,7 @@ class TerminalClientTests(unittest.TestCase):
         folder = self.root / name
         folder.mkdir()
         with zipfile.ZipFile(io.BytesIO(build_bundle(workflow))) as archive:
-            for member in ('knot.py', 'knot.cmd', 'knot.sh', 'runtime/monitor.py', 'runtime/registry.py', 'runtime/activity.py'):
+            for member in ('knot.py', 'knot.cmd', 'knot.sh', 'runtime/monitor.py', 'runtime/registry.py', 'runtime/activity.py', 'runtime/terminal_brand.py'):
                 self.assertIn(member, archive.namelist())
             archive.extractall(folder)
         return folder
@@ -46,12 +46,13 @@ class TerminalClientTests(unittest.TestCase):
 
     def test_exported_client_run_and_read_only_review_snapshot(self):
         folder = self.unpack()
-        ran = self.cli(folder, 'run', '--mode', 'mock', '--plain')
+        ran = self.cli(folder, 'run', '--mode', 'mock', '--plain', '--no-splash')
         self.assertEqual(ran.returncode, 2, ran.stdout + ran.stderr)
         paths = [folder / name for name in ('workflow.json', 'knot.json', 'logs/run-state.json', 'logs/run-state.progress.json', 'logs/events.jsonl')]
         before = {str(path): path.read_bytes() for path in paths}
         snapshot = self.cli(folder, 'status', '--json')
         self.assertEqual(snapshot.returncode, 0, snapshot.stderr)
+        self.assertNotIn('\x1b', snapshot.stdout)
         runs = json.loads(snapshot.stdout)
         self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0]['display_status'], 'waiting_review')
@@ -59,10 +60,30 @@ class TerminalClientTests(unittest.TestCase):
         self.assertNotIn('results', runs[0])
         self.assertFalse((folder / 'results/report.md').exists())
         self.assertEqual(before, {str(path): path.read_bytes() for path in paths})
-        display = self.cli(folder, 'monitor', '--once')
+        display = self.cli(folder, 'monitor', '--once', '--no-splash')
         self.assertEqual(display.returncode, 0, display.stderr)
+        self.assertNotIn('\x1b', display.stdout)
         self.assertIn('REVIEW', display.stdout)
         self.assertIn('mock', display.stdout)
+
+    def test_noninteractive_output_has_no_splash_or_terminal_controls(self):
+        folder = self.unpack()
+        # Default branding must not depend on users opting out for pipes/scripts.
+        for arguments in (('status',), ('monitor', '--once'), ('monitor',)):
+            with self.subTest(arguments=arguments):
+                observed = self.cli(folder, *arguments)
+                self.assertEqual(observed.returncode, 0, observed.stderr)
+                self.assertTrue(observed.stdout.startswith('KNOT'), observed.stdout)
+                self.assertNotIn('\x1b', observed.stdout)
+                self.assertIn('No local workflows found', observed.stdout)
+        for arguments in (('status', '--json'), ('monitor', '--json'), ('monitor', '--json', '--no-splash')):
+            with self.subTest(arguments=arguments):
+                observed = self.cli(folder, *arguments)
+                self.assertEqual(observed.returncode, 0, observed.stderr)
+                self.assertEqual(json.loads(observed.stdout), [])
+                self.assertNotIn('\x1b', observed.stdout)
+        self.assertFalse((folder / 'logs/run-state.json').exists())
+        self.assertFalse((self.root / 'registry').exists())
 
     def test_empty_monitor_does_not_start_agents_or_create_registration(self):
         folder = self.unpack()
