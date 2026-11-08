@@ -27,7 +27,7 @@ SCHEMA_GUIDE = r'''Return one JSON object, no prose outside JSON, matching schem
  "edges":[{"id":"edge-1","source":"start","target":"task-1","source_port":"out","target_port":"in","kind":"control"}],
  "limits":{"max_concurrency":2,"timeout_seconds":120,"max_retries":1,"max_tool_rounds":4},
  "viewport":{"x":20,"y":40,"zoom":0.7},
- "design_notes":["short reasoning and missing configuration in the user's language"]
+ "design_notes":["short reasoning and missing configuration, written in the same language as project.goal"]
 }
 
 Supported node types/config ONLY:
@@ -284,7 +284,7 @@ def connect_root_resources(workflow, issues):
         edge_ids.add(eid)
         repaired["edges"].append({"id": eid, "source": starts[0], "target": nid,
                                   "source_port": "out", "target_port": "in", "kind": "control"})
-    repaired["design_notes"].append("已为没有前置依赖的共享资料补齐 Start 执行连线：" + ", ".join(roots))
+    repaired["design_notes"].append("Connected Start to shared resources that had no upstream dependency: " + ", ".join(roots))
     return repaired
 
 
@@ -405,6 +405,7 @@ def plan_workflow(project, resources, planner, *, model_call=None):
                          "message": f"Invalid workflow JSON or schema: {type(exc).__name__}."}]
         # Never resend raw provider text, parse errors or secret-bearing drafts.
         prompt = ("Repair the previous draft at the node_id locations in errors and return the complete corrected workflow JSON, "
+                  "keeping every design_notes entry in the same language as project.goal (not the language of the errors), "
                   "omitting server-owned project and resources fields. Preserve valid tasks, acceptance criteria, data dependencies "
                   "and review/condition gates. For unreachable nodes, trace CONTROL paths from Start; data edges do not count. "
                   "Do not connect every task directly to Start or bypass a review/condition to silence validation. "
